@@ -35,6 +35,13 @@ Schedule::command('rss:fetch')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/rss-fetch.log'));
 
+// Send push notification after RSS fetch (6:05 AM to allow fetch to complete)
+Schedule::command('push:send')
+    ->dailyAt('06:05')
+    ->timezone('Asia/Tokyo')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/push-notification.log'));
+
 // Cleanup expired sessions - Hourly
 Schedule::call(function () {
     \App\Models\Session::cleanupExpired();

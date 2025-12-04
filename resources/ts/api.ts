@@ -157,6 +157,18 @@ export const api = {
     deleteApiKey: (provider: 'claude' | 'openai'): Promise<ApiSettingsResponse> =>
       request(`/settings/api/${provider}`, { method: 'DELETE' }),
   },
+
+  // プッシュ通知
+  push: {
+    getPublicKey: (): Promise<{ success: boolean; publicKey: string }> =>
+      request('/push/public-key'),
+    subscribe: (subscription: PushSubscriptionJSON): Promise<{ success: boolean; message: string; subscription_id: number }> =>
+      request('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+    unsubscribe: (endpoint: string): Promise<{ success: boolean; message: string }> =>
+      request('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
+    status: (): Promise<{ success: boolean; configured: boolean; subscribed: boolean; subscription_count: number }> =>
+      request('/push/status'),
+  },
 };
 
 export default api;

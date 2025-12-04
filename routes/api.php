@@ -8,6 +8,7 @@ use App\Http\Controllers\SummaryController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TrendController;
+use App\Http\Controllers\PushController;
 use App\Http\Middleware\SessionAuth;
 use App\Http\Middleware\AdminOnly;
 
@@ -46,8 +47,18 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+// Push notifications (public endpoint for getting VAPID public key)
+Route::get('/push/public-key', [PushController::class, 'publicKey']);
+
 // Protected routes (require authentication)
 Route::middleware(SessionAuth::class)->group(function () {
+
+    // Push notifications
+    Route::prefix('push')->group(function () {
+        Route::post('/subscribe', [PushController::class, 'subscribe']);
+        Route::post('/unsubscribe', [PushController::class, 'unsubscribe']);
+        Route::get('/status', [PushController::class, 'status']);
+    });
 
     // Papers
     Route::get('/papers', [PaperController::class, 'index']);

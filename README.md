@@ -1,96 +1,181 @@
-# AutoSurvey Backend - Laravel
+# AutoSurvey
 
 **Version 1.0.0**
 
-学術論文RSS集約・AI要約システムのバックエンドAPI（Laravel 12）
+学術論文RSS集約・AI要約システム
+
+AIED（AI in Education）、認知科学、メタ認知などの学術論文をRSSフィードから自動収集し、AI（Claude/OpenAI）で構造化要約を生成するWebアプリケーションです。
 
 **Developer:** Tomoki Aburatani
+
+## 機能
+
+- 学術論文誌のRSSフィードから論文情報を自動収集
+- Claude/OpenAI APIによる構造化AI要約生成
+- 期間・論文誌によるフィルタリング
+- トレンド分析（期間別の研究動向要約）
+- 論文誌管理（管理者機能）
+- ユーザー別APIキー設定
+
+## 技術スタック
+
+- **PHP 8.2+** / **Laravel 11** - バックエンドフレームワーク
+- **TypeScript** / **React 18** - フロントエンド
+- **Vite 5** - フロントエンドビルドツール（Laravel統合）
+- **Tailwind CSS 3** - スタイリング
+- **MySQL 8.0+** - データベース
+- **SimplePie** - RSS取得
+- **Anthropic Claude / OpenAI** - AI要約生成
 
 ## 必要要件
 
 - PHP 8.2以上
 - Composer
+- Node.js 18以上
+- npm
 - MySQL 8.0以上
-- Node.js（フロントエンドビルド用）
 
 ## セットアップ
 
-### 1. 依存関係のインストール
+### ワンコマンドセットアップ（推奨）
 
 ```bash
-cd backend
+./setup.sh
+```
+
+このスクリプトは以下を自動実行します：
+1. PHP/Composerの依存関係インストール
+2. Node.js/npmの依存関係インストール
+3. 環境設定（.env作成、APP_KEY生成）
+4. データベース作成・マイグレーション
+5. 初期データ投入（シーディング）
+6. フロントエンドビルド（Vite/TypeScript）
+7. Laravel最適化
+
+### 手動セットアップ
+
+```bash
+# PHP依存関係
 composer install
-```
 
-### 2. 環境設定
+# Node.js依存関係
+npm install
 
-```bash
+# 環境設定
 cp .env.example .env
-# .envファイルを編集してDB接続情報とAPIキーを設定
-```
-
-必須の環境変数:
-- `DB_*`: MySQLデータベース接続情報
-- `CLAUDE_API_KEY` または `OPENAI_API_KEY`: AI要約生成用
-
-### 3. アプリケーションキーの生成
-
-```bash
 php artisan key:generate
-```
 
-### 4. データベースのセットアップ
-
-```bash
-# マイグレーション実行
+# データベース
 php artisan migrate
-
-# 初期データ（論文誌マスタ・管理者ユーザー）を挿入
 php artisan db:seed
+
+# フロントエンドビルド
+npm run build
 ```
 
-### 5. 開発サーバーの起動
+### 環境変数の設定
 
-```bash
-php artisan serve
+`.env`ファイルを編集し、以下を設定してください：
+
+```env
+# データベース接続
+DB_HOST=127.0.0.1
+DB_DATABASE=autosurvey
+DB_USERNAME=your_user
+DB_PASSWORD=your_password
+
+# AI APIキー（少なくとも一方を設定）
+CLAUDE_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 ```
 
-APIは `http://localhost:8000/autosurvey/api` でアクセス可能です。
-
-## CLIコマンド
-
-### ユーザー作成
+## 開発コマンド
 
 ```bash
-# 対話モード
+# 開発サーバー起動（Vite HMR + Laravel）
+php artisan serve &
+npm run dev
+
+# 本番ビルド
+npm run build
+
+# ユーザー作成
 php artisan user:create
 
-# 引数指定
-php artisan user:create username password --admin --email=user@example.com
+# RSS取得
+php artisan rss:fetch              # 全ジャーナル
+php artisan rss:fetch ijaied       # 特定ジャーナル
+php artisan rss:fetch --list       # ジャーナル一覧
+
+# キャッシュクリア
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
 ```
 
-### RSS取得
+## Apache設定
+
+`https://your-domain.org/autosurvey/` でアクセスする場合：
+
+```apache
+Alias /autosurvey /path/to/AutoSurvey/public
+
+<Directory /path/to/AutoSurvey/public>
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+パーミッション設定：
+```bash
+sudo chown -R www-data:www-data storage bootstrap/cache
+sudo chmod -R 775 storage bootstrap/cache
+```
+
+## スケジューラー設定
+
+cronで毎分スケジューラーを実行（デフォルトで毎日6:00にRSS取得）：
 
 ```bash
-# 全ジャーナルを取得
-php artisan rss:fetch
-
-# 特定のジャーナルを取得
-php artisan rss:fetch ijaied
-
-# ジャーナル一覧を表示
-php artisan rss:fetch --list
+* * * * * cd /path/to/AutoSurvey && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-### スケジューラー
+## ディレクトリ構成
 
-本番環境では、cronで毎分スケジューラーを実行:
-
-```bash
-* * * * * cd /path/to/backend && php artisan schedule:run >> /dev/null 2>&1
 ```
-
-デフォルトで毎日6:00（Asia/Tokyo）にRSS取得が実行されます。
+AutoSurvey/
+├── app/
+│   ├── Console/Commands/      # Artisanコマンド (user:create, rss:fetch)
+│   ├── Http/
+│   │   ├── Controllers/       # APIコントローラー
+│   │   └── Middleware/        # 認証ミドルウェア
+│   ├── Models/                # Eloquentモデル
+│   └── Services/              # ビジネスロジック (AI要約, RSS取得)
+├── config/                    # Laravel設定ファイル
+├── database/
+│   ├── migrations/            # データベースマイグレーション
+│   └── seeders/               # 初期データシーダー
+├── public/                    # Webルート
+│   └── build/                 # Viteビルド出力
+├── resources/
+│   ├── ts/                    # React/TypeScriptソース
+│   │   ├── components/        # Reactコンポーネント
+│   │   ├── api.ts             # API通信
+│   │   ├── types.ts           # 型定義
+│   │   └── main.tsx           # エントリーポイント
+│   └── views/
+│       └── app.blade.php      # SPAテンプレート
+├── routes/
+│   ├── api.php                # APIルート定義
+│   └── web.php                # Webルート（SPAフォールバック）
+├── storage/                   # ログ・キャッシュ
+├── composer.json              # PHP依存関係
+├── package.json               # Node.js依存関係
+├── vite.config.ts             # Vite設定
+├── tailwind.config.js         # Tailwind設定
+├── tsconfig.json              # TypeScript設定
+└── setup.sh                   # セットアップスクリプト
+```
 
 ## API エンドポイント
 
@@ -98,74 +183,55 @@ php artisan rss:fetch --list
 
 | メソッド | エンドポイント | 説明 |
 |---------|---------------|------|
-| POST | `/autosurvey/api/auth/login` | ログイン |
-| POST | `/autosurvey/api/auth/register` | ユーザー登録 |
-| POST | `/autosurvey/api/auth/logout` | ログアウト |
-| GET | `/autosurvey/api/auth/me` | 現在のユーザー情報 |
+| POST | `/api/auth/login` | ログイン |
+| POST | `/api/auth/register` | ユーザー登録 |
+| POST | `/api/auth/logout` | ログアウト |
+| GET | `/api/auth/me` | 現在のユーザー情報 |
 
 ### 論文
 
 | メソッド | エンドポイント | 説明 |
 |---------|---------------|------|
-| GET | `/autosurvey/api/papers` | 論文一覧（フィルタ対応） |
-| GET | `/autosurvey/api/papers/:id` | 論文詳細 |
-| GET | `/autosurvey/api/papers/stats` | 統計情報 |
+| GET | `/api/papers` | 論文一覧（フィルタ対応） |
+| GET | `/api/papers/{id}` | 論文詳細 |
 
 ### 論文誌
 
 | メソッド | エンドポイント | 説明 |
 |---------|---------------|------|
-| GET | `/autosurvey/api/journals` | 論文誌一覧 |
-| GET | `/autosurvey/api/journals/:id` | 論文誌詳細 |
+| GET | `/api/journals` | 論文誌一覧 |
 
 ### AI要約
 
 | メソッド | エンドポイント | 説明 |
 |---------|---------------|------|
-| GET | `/autosurvey/api/summaries/providers` | 利用可能なAIプロバイダ |
-| POST | `/autosurvey/api/summaries/generate` | 要約生成 |
-| GET | `/autosurvey/api/summaries/:paperId` | 論文の要約一覧 |
+| GET | `/api/summaries/providers` | 利用可能なAIプロバイダ |
+| POST | `/api/summaries/generate` | 要約生成 |
+
+### トレンド分析
+
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/api/trends/papers` | 期間別論文取得 |
+| POST | `/api/trends/summary` | トレンド要約生成 |
 
 ### 管理者API
 
 | メソッド | エンドポイント | 説明 |
 |---------|---------------|------|
-| POST | `/autosurvey/api/admin/journals` | 論文誌追加 |
-| PUT | `/autosurvey/api/admin/journals/:id` | 論文誌更新 |
-| DELETE | `/autosurvey/api/admin/journals/:id` | 論文誌無効化 |
-| POST | `/autosurvey/api/admin/journals/test-rss` | RSSテスト |
-| GET | `/autosurvey/api/admin/scheduler/status` | スケジューラー状態 |
-| POST | `/autosurvey/api/admin/scheduler/run` | RSS手動取得 |
-| GET | `/autosurvey/api/admin/logs` | 取得ログ |
-| GET | `/autosurvey/api/admin/users` | ユーザー一覧 |
-
-## ディレクトリ構成
-
-```
-backend/
-├── app/
-│   ├── Console/Commands/     # CLIコマンド
-│   ├── Http/
-│   │   ├── Controllers/      # APIコントローラー
-│   │   └── Middleware/       # 認証ミドルウェア
-│   ├── Models/               # Eloquentモデル
-│   ├── Providers/            # サービスプロバイダ
-│   └── Services/             # ビジネスロジック
-├── config/                   # 設定ファイル
-├── database/
-│   ├── migrations/           # マイグレーション
-│   └── seeders/              # シーダー
-├── routes/
-│   ├── api.php              # APIルート
-│   └── console.php          # スケジュールタスク
-└── .env.example             # 環境変数テンプレート
-```
+| POST | `/api/admin/journals` | 論文誌追加 |
+| PUT | `/api/admin/journals/{id}` | 論文誌更新 |
+| DELETE | `/api/admin/journals/{id}` | 論文誌削除 |
+| POST | `/api/admin/journals/test-rss` | RSSテスト |
+| POST | `/api/admin/scheduler/run` | RSS手動取得 |
 
 ## 本番環境へのデプロイ
 
 ```bash
 # 依存関係（本番用）
 composer install --optimize-autoloader --no-dev
+npm ci
+npm run build
 
 # キャッシュ
 php artisan config:cache
@@ -182,4 +248,4 @@ MIT
 
 ---
 
-© 2024 Tomoki Aburatani
+© 2024-2025 Tomoki Aburatani

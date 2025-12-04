@@ -43,7 +43,7 @@ return [
     'ai' => [
         'provider' => env('AI_PROVIDER', 'claude'),
         'claude_api_key' => env('CLAUDE_API_KEY'),
-        'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-5-20250929'),
+        'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
         'openai_api_key' => env('OPENAI_API_KEY'),
         'openai_model' => env('OPENAI_MODEL', 'gpt-4o'),
     ],
@@ -57,6 +57,21 @@ return [
         'enabled' => env('FETCH_ENABLED', true),
         'schedule' => env('FETCH_SCHEDULE', '0 6 * * *'),
         'min_interval' => env('FETCH_MIN_INTERVAL', 5000),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Web Push Notifications
+    |--------------------------------------------------------------------------
+    |
+    | VAPID keys for Web Push notifications.
+    | Generate keys at: https://web-push-codelab.glitch.me/
+    |
+    */
+    'webpush' => [
+        'public_key' => env('VAPID_PUBLIC_KEY', ''),
+        'private_key' => env('VAPID_PRIVATE_KEY', ''),
+        'subject' => env('VAPID_SUBJECT', 'mailto:admin@example.com'),
     ],
 
 ];

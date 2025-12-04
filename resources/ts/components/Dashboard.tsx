@@ -227,104 +227,115 @@ export default function Dashboard({ user, onLogout }: DashboardProps): JSX.Eleme
       />
 
       {/* メインコンテンツ */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* フィルターバー */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex flex-wrap gap-4 items-center justify-between">
-            {/* 論文誌フィルター */}
-            <div className="relative">
-              <button
-                onClick={() => setShowJournalFilter(!showJournalFilter)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Filter className="w-4 h-4" />
-                <span>論文誌 ({selectedJournals.length}/{journals.length})</span>
-                {showJournalFilter ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </button>
-
-              {showJournalFilter && (
-                <div className="absolute top-full left-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-20">
-                  <div className="flex justify-between mb-3">
-                    <button
-                      onClick={() => setSelectedJournals(journals.map((j) => j.id))}
-                      className="text-xs text-indigo-600 hover:underline"
-                    >
-                      すべて選択
-                    </button>
-                    <button
-                      onClick={() => setSelectedJournals([])}
-                      className="text-xs text-gray-500 hover:underline"
-                    >
-                      すべて解除
-                    </button>
-                  </div>
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
-                    {journals.map((journal) => (
-                      <label
-                        key={journal.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedJournals.includes(journal.id)}
-                          onChange={() => toggleJournal(journal.id)}
-                          className="w-4 h-4 text-indigo-600 rounded"
-                        />
-                        <span className={`w-3 h-3 rounded-full ${journal.color}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{journal.name}</div>
-                          <div className="text-xs text-gray-500">
-                            {journal.category} • {journal.paper_count || 0}件
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 日付フィルター */}
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-500" />
-              <select
-                value={dateFilter}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setDateFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                {DATE_FILTERS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* AIプロバイダ選択 */}
-            {aiProviders.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-gray-500" />
-                <select
-                  value={selectedProvider}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 sm:items-center sm:justify-between">
+            {/* 上段：論文誌フィルターと件数（モバイル） */}
+            <div className="flex items-center justify-between sm:justify-start gap-3">
+              {/* 論文誌フィルター */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowJournalFilter(!showJournalFilter)}
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
                 >
-                  {aiProviders.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
+                  <Filter className="w-4 h-4" />
+                  <span className="hidden xs:inline">論文誌</span> ({selectedJournals.length}/{journals.length})
+                  {showJournalFilter ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+
+                {showJournalFilter && (
+                  <div className="absolute top-full left-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-96 bg-white rounded-xl shadow-xl border border-gray-200 p-3 sm:p-4 z-20">
+                    <div className="flex justify-between mb-3">
+                      <button
+                        onClick={() => setSelectedJournals(journals.map((j) => j.id))}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        すべて選択
+                      </button>
+                      <button
+                        onClick={() => setSelectedJournals([])}
+                        className="text-xs text-gray-500 hover:underline"
+                      >
+                        すべて解除
+                      </button>
+                    </div>
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {journals.map((journal) => (
+                        <label
+                          key={journal.id}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedJournals.includes(journal.id)}
+                            onChange={() => toggleJournal(journal.id)}
+                            className="w-4 h-4 text-indigo-600 rounded"
+                          />
+                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${journal.color}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{journal.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {journal.category} • {journal.paper_count || 0}件
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 件数表示（モバイルで上段に表示） */}
+              <div className="text-sm text-gray-600 font-medium sm:hidden">
+                {pagination.total}件
+              </div>
+            </div>
+
+            {/* 下段：日付・AI選択（モバイルでは横並び） */}
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+              {/* 日付フィルター */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <select
+                  value={dateFilter}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setDateFilter(e.target.value)}
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {DATE_FILTERS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
 
-            {/* 件数表示 */}
-            <div className="text-sm text-gray-600 font-medium">
-              {pagination.total}件の論文
+              {/* AIプロバイダ選択 */}
+              {aiProviders.length > 0 && (
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <Sparkles className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={selectedProvider}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    {aiProviders.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* 件数表示（デスクトップ） */}
+              <div className="hidden sm:block text-sm text-gray-600 font-medium">
+                {pagination.total}件の論文
+              </div>
             </div>
           </div>
         </div>

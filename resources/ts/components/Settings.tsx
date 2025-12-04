@@ -1,10 +1,26 @@
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
-import { ArrowLeft, Key, Eye, EyeOff, Save, Trash2, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Key, Eye, EyeOff, Save, Trash2, Loader2, CheckCircle, AlertCircle, Bell, BellOff } from 'lucide-react';
 import api from '../api';
 import type { ApiSettings } from '../types';
 
 interface SettingsProps {
   onBack: () => void;
+}
+
+// Convert base64 string to Uint8Array for applicationServerKey
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray.buffer;
 }
 
 export default function Settings({ onBack }: SettingsProps): JSX.Element {
@@ -20,6 +36,13 @@ export default function Settings({ onBack }: SettingsProps): JSX.Element {
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
 
+  // Push notification state
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+
   // Fetch current settings
   useEffect(() => {
     async function fetchSettings(): Promise<void> {
@@ -34,6 +57,29 @@ export default function Settings({ onBack }: SettingsProps): JSX.Element {
       }
     }
     fetchSettings();
+  }, []);
+
+  // Check push notification support
+  useEffect(() => {
+    async function checkPushSupport(): Promise<void> {
+      // Check if browser supports push notifications
+      const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+      setPushSupported(supported);
+
+      if (supported) {
+        setPushPermission(Notification.permission);
+
+        // Check server configuration and subscription status
+        try {
+          const status = await api.push.status();
+          setPushConfigured(status.configured);
+          setPushSubscribed(status.subscribed);
+        } catch {
+          // API might not be available yet
+        }
+      }
+    }
+    checkPushSupport();
   }, []);
 
   // Save settings
@@ -77,6 +123,82 @@ export default function Settings({ onBack }: SettingsProps): JSX.Element {
       setMessage({ type: 'error', text: (error as Error).message || '保存に失敗しました' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Subscribe to push notifications
+  const handlePushSubscribe = async (): Promise<void> => {
+    if (!pushSupported) return;
+
+    setPushLoading(true);
+    setMessage(null);
+
+    try {
+      // Request notification permission if not granted
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        setPushPermission(permission);
+        if (permission !== 'granted') {
+          setMessage({ type: 'error', text: '通知の許可が必要です' });
+          setPushLoading(false);
+          return;
+        }
+      } else if (Notification.permission === 'denied') {
+        setMessage({ type: 'error', text: '通知がブロックされています。ブラウザの設定から許可してください' });
+        setPushLoading(false);
+        return;
+      }
+
+      // Get VAPID public key from server
+      const { publicKey } = await api.push.getPublicKey();
+
+      // Get service worker registration
+      const registration = await navigator.serviceWorker.ready;
+
+      // Subscribe to push notifications
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+
+      // Send subscription to server
+      const subscriptionJSON = subscription.toJSON();
+      await api.push.subscribe(subscriptionJSON);
+
+      setPushSubscribed(true);
+      setMessage({ type: 'success', text: 'プッシュ通知を有効にしました。毎朝6時に新着論文の通知が届きます' });
+    } catch (error) {
+      console.error('Push subscription error:', error);
+      setMessage({ type: 'error', text: (error as Error).message || 'プッシュ通知の登録に失敗しました' });
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  // Unsubscribe from push notifications
+  const handlePushUnsubscribe = async (): Promise<void> => {
+    setPushLoading(true);
+    setMessage(null);
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+
+      if (subscription) {
+        // Unsubscribe from browser
+        await subscription.unsubscribe();
+
+        // Notify server
+        await api.push.unsubscribe(subscription.endpoint);
+      }
+
+      setPushSubscribed(false);
+      setMessage({ type: 'success', text: 'プッシュ通知を無効にしました' });
+    } catch (error) {
+      console.error('Push unsubscribe error:', error);
+      setMessage({ type: 'error', text: (error as Error).message || 'プッシュ通知の解除に失敗しました' });
+    } finally {
+      setPushLoading(false);
     }
   };
 
@@ -279,7 +401,7 @@ export default function Settings({ onBack }: SettingsProps): JSX.Element {
           </div>
 
           {/* Submit button */}
-          <div className="flex justify-end">
+          <div className="flex justify-end mb-8">
             <button
               type="submit"
               disabled={saving}
@@ -294,6 +416,81 @@ export default function Settings({ onBack }: SettingsProps): JSX.Element {
             </button>
           </div>
         </form>
+
+        {/* Push Notifications - Outside form */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-lg font-semibold text-gray-900">プッシュ通知</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            毎朝6時に新着論文のプッシュ通知を受け取ることができます
+          </p>
+
+          {!pushSupported ? (
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <p className="text-sm text-yellow-800">
+                お使いのブラウザはプッシュ通知に対応していません
+              </p>
+            </div>
+          ) : !pushConfigured ? (
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600">
+                サーバー側でプッシュ通知が設定されていません。管理者に連絡してください。
+              </p>
+            </div>
+          ) : pushPermission === 'denied' ? (
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <p className="text-sm text-red-800">
+                通知がブロックされています。ブラウザの設定から通知を許可してください。
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {pushSubscribed ? (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <Bell className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">通知ON</p>
+                      <p className="text-sm text-gray-500">毎朝6時に通知が届きます</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                      <BellOff className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">通知OFF</p>
+                      <p className="text-sm text-gray-500">通知は無効です</p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={pushSubscribed ? handlePushUnsubscribe : handlePushSubscribe}
+                disabled={pushLoading}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
+                  pushSubscribed
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+              >
+                {pushLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : pushSubscribed ? (
+                  <BellOff className="w-4 h-4" />
+                ) : (
+                  <Bell className="w-4 h-4" />
+                )}
+                {pushSubscribed ? '通知を無効にする' : '通知を有効にする'}
+              </button>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

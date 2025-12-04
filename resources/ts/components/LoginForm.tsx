@@ -107,14 +107,14 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="p-3 bg-indigo-100 rounded-xl">
-            <BookOpen className="w-8 h-8 text-indigo-600" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 px-4 py-8">
+      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
+          <div className="p-2 sm:p-3 bg-indigo-100 rounded-xl">
+            <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">AutoSurvey</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AutoSurvey</h1>
           </div>
         </div>
 

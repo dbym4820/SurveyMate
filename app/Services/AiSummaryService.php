@@ -45,9 +45,9 @@ class AiSummaryService
                 'id' => 'claude',
                 'name' => 'Claude',
                 'models' => [
-                    config('services.ai.claude_model', 'claude-sonnet-4-5-20250929'),
+                    config('services.ai.claude_model', 'claude-sonnet-4-20250514'),
                 ],
-                'default_model' => config('services.ai.claude_model', 'claude-sonnet-4-5-20250929'),
+                'default_model' => config('services.ai.claude_model', 'claude-sonnet-4-20250514'),
                 'user_key' => $this->user && $this->user->hasClaudeApiKey(),
             ];
         }
@@ -141,7 +141,7 @@ PROMPT;
             throw new \Exception('Claude API key is not configured. Please set your API key in Settings.');
         }
 
-        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-5-20250929');
+        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-20250514');
 
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
@@ -197,17 +197,27 @@ PROMPT;
 
         $model = $model ?? config('services.ai.openai_model', 'gpt-4o');
 
+        // Build request body
+        $requestBody = [
+            'model' => $model,
+            'temperature' => 0.3,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are an academic paper summarization assistant. Always respond in valid JSON format.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+
+        // Use max_completion_tokens for newer models, max_tokens for older ones
+        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+            $requestBody['max_completion_tokens'] = 2000;
+        } else {
+            $requestBody['max_tokens'] = 2000;
+        }
+
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
             'Content-Type' => 'application/json',
-        ])->timeout(120)->post(self::OPENAI_API_URL, [
-            'model' => $model,
-            'max_tokens' => 2000,
-            'temperature' => 0.3,
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt],
-            ],
-        ]);
+        ])->timeout(120)->post(self::OPENAI_API_URL, $requestBody);
 
         if (!$response->successful()) {
             Log::error('OpenAI API error', [
@@ -272,7 +282,7 @@ PROMPT;
             throw new \Exception('Claude API key is not configured.');
         }
 
-        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-5-20250929');
+        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-20250514');
 
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
@@ -311,19 +321,33 @@ PROMPT;
 
         $model = $model ?? config('services.ai.openai_model', 'gpt-4o');
 
+        // Build request body
+        $requestBody = [
+            'model' => $model,
+            'temperature' => 0.3,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are an academic research trend analysis assistant. Always respond in valid JSON format.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+
+        // Use max_completion_tokens for newer models, max_tokens for older ones
+        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+            $requestBody['max_completion_tokens'] = 4000;
+        } else {
+            $requestBody['max_tokens'] = 4000;
+        }
+
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
             'Content-Type' => 'application/json',
-        ])->timeout(180)->post(self::OPENAI_API_URL, [
-            'model' => $model,
-            'max_tokens' => 4000,
-            'temperature' => 0.3,
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt],
-            ],
-        ]);
+        ])->timeout(180)->post(self::OPENAI_API_URL, $requestBody);
 
         if (!$response->successful()) {
+            Log::error('OpenAI API error (custom)', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
             throw new \Exception('OpenAI API request failed: ' . $response->body());
         }
 

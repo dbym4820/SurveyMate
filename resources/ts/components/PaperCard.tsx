@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ExternalLink, Sparkles, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { ExternalLink, Sparkles, ChevronUp, Loader2 } from 'lucide-react';
 import api from '../api';
 import type { Paper, Summary } from '../types';
 
@@ -54,17 +54,17 @@ export default function PaperCard({ paper, selectedProvider }: PaperCardProps): 
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all">
-      <div className="p-5">
-        <div className="flex items-start gap-4">
+      <div className="p-3 sm:p-5">
+        <div className="flex items-start gap-2 sm:gap-4">
           {/* 色バー */}
-          <div className={`w-1.5 self-stretch rounded-full ${paper.journal_color}`} />
+          <div className={`w-1 sm:w-1.5 self-stretch rounded-full ${paper.journal_color}`} />
 
           {/* コンテンツ */}
           <div className="flex-1 min-w-0">
             {/* メタ情報 */}
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`px-2.5 py-1 text-xs font-medium text-white rounded-lg ${paper.journal_color}`}>
-                {paper.journal_name}
+            <div className="flex items-start sm:items-center gap-2 mb-2 flex-wrap">
+              <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 text-xs font-medium text-white rounded-lg ${paper.journal_color} leading-tight`}>
+                {paper.journal_full_name || paper.journal_name}
               </span>
               <span className="text-xs text-gray-500">
                 {formatDate(paper.published_date)}
@@ -78,19 +78,19 @@ export default function PaperCard({ paper, selectedProvider }: PaperCardProps): 
             </div>
 
             {/* タイトル */}
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2 leading-snug">
               {paper.title}
             </h3>
 
             {/* 著者 */}
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 sm:line-clamp-none">
               {authors}
             </p>
 
             {/* アブストラクト */}
             {paper.abstract && (
               <div className="mb-4">
-                <p className={`text-sm text-gray-700 ${!abstractExpanded && isAbstractLong ? 'line-clamp-3' : ''}`}>
+                <p className={`text-xs sm:text-sm text-gray-700 ${!abstractExpanded && isAbstractLong ? 'line-clamp-3' : ''}`}>
                   {paper.abstract}
                 </p>
                 {isAbstractLong && (
@@ -105,20 +105,33 @@ export default function PaperCard({ paper, selectedProvider }: PaperCardProps): 
             )}
 
             {/* アクション */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* AI要約ボタン：要約がない場合のみ表示 */}
-              {!hasSummary && (
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* AI要約ボタン：要約がない場合は生成ボタン、ある場合は表示トグル */}
+              {!hasSummary ? (
                 <button
                   onClick={generateSummary}
                   disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs sm:text-sm rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
                 >
                   {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                   ) : (
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   )}
                   {loading ? '生成中...' : 'AI要約'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setExpanded(!expanded)}
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs sm:text-sm rounded-lg hover:from-green-600 hover:to-emerald-600 font-medium transition-all"
+                >
+                  {expanded ? (
+                    <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  )}
+                  <span className="hidden xs:inline">{expanded ? 'AI要約を閉じる' : 'AI要約を表示'}</span>
+                  <span className="xs:hidden">{expanded ? '閉じる' : '要約'}</span>
                 </button>
               )}
 
@@ -126,48 +139,34 @@ export default function PaperCard({ paper, selectedProvider }: PaperCardProps): 
                 href={paper.url || '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+                className="flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-indigo-600 transition-colors"
               >
-                <ExternalLink className="w-4 h-4" />
-                論文を開く
+                <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">論文を開く</span>
+                <span className="sm:hidden">開く</span>
               </a>
-
-              {/* 要約表示トグル：要約がある場合のみ表示 */}
-              {hasSummary && (
-                <button
-                  onClick={() => setExpanded(!expanded)}
-                  className="flex items-center gap-1 text-sm text-indigo-600 font-medium hover:text-indigo-800"
-                >
-                  {expanded ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                  {expanded ? 'AI要約を閉じる' : 'AI要約を表示'}
-                </button>
-              )}
             </div>
 
             {/* AI要約 */}
             {summary && expanded && (
-              <div className="mt-4 p-5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-                <div className="flex items-center justify-between mb-4">
+              <div className="mt-3 sm:mt-4 p-3 sm:p-5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-600" />
-                    <span className="font-medium text-indigo-900">AI要約</span>
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+                    <span className="font-medium text-indigo-900 text-sm sm:text-base">AI要約</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs px-2 py-1 bg-indigo-100 rounded-full text-indigo-600">
                       {summary.ai_provider}
                     </span>
                     {summary.ai_model && (
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 hidden sm:inline">
                         {summary.ai_model}
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="space-y-4 text-sm text-gray-800">
+                <div className="space-y-3 sm:space-y-4 text-xs sm:text-sm text-gray-800">
                   {summary.purpose && (
                     <div>
                       <span className="font-semibold text-indigo-700">【研究目的】</span>
