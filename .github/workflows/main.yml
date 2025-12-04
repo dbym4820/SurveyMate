@@ -27,7 +27,4 @@ jobs:
                 cd ${{ secrets.DEPLOY_DIR }}
                 git pull origin main
 
-                composer install
-                
-                npm install
-                npm run build
+                sh setup.sh
