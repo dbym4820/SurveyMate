@@ -121,3 +121,31 @@
 2025-12-04 13:53:35 [INFO] GET /autosurvey/api/journals {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
 2025-12-04 13:53:35 [INFO] GET /autosurvey/api/papers {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
 2025-12-04 13:55:05 [INFO] SIGINT received, shutting down gracefully
+2025-12-04 14:42:17 [INFO] Database connected successfully
+2025-12-04 14:42:17 [INFO] Scheduler started {"schedule":"0 0 6 * * *","nextRun":"2025-12-04T21:00:00.000Z"}
+2025-12-04 14:42:17 [INFO] RSS fetch scheduler started
+2025-12-04 14:42:17 [INFO] Server running on port 3001
+2025-12-04 14:42:17 [INFO] Environment: production
+2025-12-04 14:42:17 [INFO] Base path: /autosurvey
+2025-12-04 14:42:17 [INFO] AI Provider: openai
+2025-12-04 14:42:17 [INFO] Access URL: http://localhost:3001/autosurvey/
+2025-12-04 14:42:22 [INFO] GET /autosurvey/favicon.svg {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/ {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/assets/index-BnBveN3E.css {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/assets/index-DUhQFLRf.js {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/api/auth/me {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/api/journals {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/api/summaries/providers {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/api/journals {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/api/papers {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:23 [INFO] GET /autosurvey/favicon.svg {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/ {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/assets/index-DUhQFLRf.js {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/assets/index-BnBveN3E.css {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/api/auth/me {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/api/summaries/providers {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/api/journals {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/api/journals {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/api/papers {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:42:24 [INFO] GET /autosurvey/favicon.svg {"ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"}
+2025-12-04 14:43:26 [INFO] SIGINT received, shutting down gracefully

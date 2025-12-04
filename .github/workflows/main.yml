@@ -1,0 +1,33 @@
+name: CV Deploy CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+          - name: Deploy
+            uses: appleboy/ssh-action@master
+            with:
+              host: ${{ secrets.DEPLOY_HOST }}
+              username: ${{ secrets.DEPLOY_USER }}
+              port: ${{ secrets.DEPLOY_PORT }}
+              key: ${{ secrets.DEPLOY_KEY }}
+              script: |
+
+                # nvm を読み込んで Node 22 を使う
+                export NVM_DIR="$HOME/.nvm"
+                [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+                nvm use 25
+
+                cd ${{ secrets.DEPLOY_DIR }}
+                git pull origin main
+
+                composer install
+                
+                npm install
+                npm run build

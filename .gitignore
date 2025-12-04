@@ -1,4 +1,47 @@
+# OS files
 .DS_Store
+Thumbs.db
+
+# Environment files
 .env
-.node_modules/*
+*.env.local
+
+# Lock files
+*.lock
 package-lock.json
+composer.lock
+
+# Dependencies
+/node_modules/
+/vendor/
+
+# Laravel
+/storage/*.key
+/storage/logs/*
+!/storage/logs/.gitkeep
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep
+
+# Vite build output
+/public/build/
+/public/hot
+
+# Logs
+/logs/*
+!/logs/.gitkeep
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.phpunit.result.cache
+/coverage/
+
+# Misc
+*.bak
+*.tmp

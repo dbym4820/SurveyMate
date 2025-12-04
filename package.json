@@ -1,67 +1,28 @@
 {
-  "name": "academic-paper-rss-system",
-  "version": "2.0.0",
-  "description": "学術論文RSS集約・AI要約システム（MySQL + 認証 + Vite + スケジューラー）",
+  "name": "autosurvey",
+  "private": true,
+  "version": "1.0.0",
   "type": "module",
-  "main": "dist/server.js",
   "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "dev:backend": "tsx watch src/server.ts",
-    "build": "npm run build:backend && npm run build:frontend",
-    "build:backend": "tsc",
-    "build:frontend": "cd frontend && npm run build",
-    "start": "npm run build && NODE_ENV=production node dist/server.js",
-    "start:prod": "NODE_ENV=production node dist/server.js",
-    "preview": "cd frontend && npm run preview",
-    "typecheck": "tsc --noEmit",
-    "typecheck:frontend": "cd frontend && npx tsc --noEmit",
-    "install:all": "npm install && cd frontend && npm install",
-    "db:setup": "mysql -u root -p < database/schema.sql",
-    "db:reset": "mysql -u root -p -e 'DROP DATABASE IF EXISTS academic_papers' && npm run db:setup",
-    "user:create": "tsx src/scripts/create-user.ts",
-    "fetch:now": "tsx src/scripts/fetch-now.ts"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.25.0",
-    "bcrypt": "^5.1.1",
-    "cookie-parser": "^1.4.6",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "mysql2": "^3.6.5",
-    "node-cron": "^3.0.3",
-    "openai": "^4.20.0",
-    "rss-parser": "^3.13.0",
-    "winston": "^3.11.0"
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
-    "@types/cookie-parser": "^1.4.7",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
-    "@types/node-cron": "^3.0.11",
-    "tsx": "^4.6.0",
-    "typescript": "^5.3.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": [
-    "academic",
-    "rss",
-    "papers",
-    "AI",
-    "education",
-    "research",
-    "claude",
-    "openai",
-    "vite",
-    "react",
-    "typescript"
-  ],
-  "author": "",
-  "license": "MIT"
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.16",
+    "laravel-vite-plugin": "^1.0.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.0"
+  }
 }

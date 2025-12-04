@@ -1,4 +1,4 @@
-# CLAUDE.md - 学術論文RSS集約・AI要約システム
+# CLAUDE.md - AutoSurvey
 
 このファイルはClaude Codeがプロジェクトを理解するためのガイドです．
 
@@ -8,202 +8,192 @@ AIED（AI in Education），認知科学，メタ認知などの学術論文をR
 
 ## 技術スタック
 
-### バックエンド
-- **Node.js** + **Express** - APIサーバー
-- **MySQL 8.0+** - データベース
-- **node-cron** - スケジューラー
-- **rss-parser** - RSS取得
-- **bcrypt** - パスワードハッシュ
-- **winston** - ロギング
-
-### フロントエンド
-- **Vite 5** - ビルドツール
-- **React 18** - UIライブラリ
+- **PHP 8.2+** / **Laravel 11.x** - バックエンドフレームワーク
+- **TypeScript** / **React 18** - フロントエンド（Laravel Vite統合）
 - **Tailwind CSS 3** - スタイリング
-- **Lucide React** - アイコン
+- **MySQL 8.0+** - データベース
+- **SimplePie** - RSS取得
+- **Anthropic Claude / OpenAI** - AI要約生成
 
-### AI連携
-- **Anthropic Claude API** - 論文要約生成
-- **OpenAI API** - 代替プロバイダ
-
-## ディレクトリ構造
+## ディレクトリ構造（Laravel 11）
 
 ```
 /
-├── server.js              # Expressメインサーバー（サブディレクトリ対応）
-├── package.json           # バックエンド依存関係
-├── .env                   # 環境変数（gitignore）
-├── .env.example           # 環境変数テンプレート
-│
-├── frontend/              # Vite + React フロントエンド
-│   ├── package.json
-│   ├── vite.config.js     # base: '/autosurvey/' 設定
-│   ├── tailwind.config.js
-│   ├── index.html
-│   └── src/
-│       ├── main.jsx
-│       ├── App.jsx        # ルートコンポーネント
-│       ├── api.js         # APIクライアント（BASE_PATH対応）
-│       ├── constants.js   # 定数定義
-│       └── components/
-│           ├── LoginForm.jsx
-│           ├── Dashboard.jsx
-│           ├── JournalManagement.jsx
-│           ├── JournalModal.jsx
-│           └── PaperCard.jsx
-│
-├── database/
-│   └── schema.sql         # MySQLスキーマ（テーブル，ビュー，プロシージャ）
-│
-├── lib/
-│   ├── database.js        # MySQL接続プール
-│   ├── auth.js            # 認証ミドルウェア
-│   ├── scheduler.js       # RSS取得スケジューラー
-│   ├── ai-summary.js      # AI要約生成（Claude/OpenAI）
-│   └── logger.js          # Winstonロガー
-│
+├── app/
+│   ├── Console/Commands/      # Artisanコマンド (user:create, rss:fetch)
+│   ├── Http/
+│   │   ├── Controllers/       # APIコントローラー
+│   │   └── Middleware/        # カスタムミドルウェア (SessionAuth, AdminOnly)
+│   ├── Models/                # Eloquentモデル
+│   ├── Services/              # ビジネスロジック (AI要約, RSS取得)
+│   └── Providers/
+├── bootstrap/
+│   ├── app.php                # アプリケーション設定・ミドルウェア・ルーティング
+│   └── providers.php          # サービスプロバイダー登録
+├── config/
+├── database/migrations/
+├── public/                    # Webルート (Apache DocumentRoot)
+│   ├── index.php
+│   ├── .htaccess
+│   └── build/                 # Viteビルド出力 (gitignore)
+├── resources/
+│   ├── ts/                    # React/TypeScriptソース
+│   │   ├── components/
+│   │   ├── api.ts
+│   │   ├── types.ts
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   └── views/
+│       └── app.blade.php      # SPAエントリーポイント
 ├── routes/
-│   ├── auth.js            # POST /api/auth/login, logout, GET /me
-│   ├── journals.js        # GET /api/journals
-│   ├── papers.js          # GET /api/papers, /api/papers/:id
-│   ├── summaries.js       # GET /api/summaries/providers, POST /generate
-│   └── admin.js           # 管理者API（論文誌CRUD，スケジューラー）
-│
-├── scripts/
-│   ├── create-user.js     # ユーザー作成CLI
-│   └── fetch-now.js       # 手動RSS取得CLI
-│
-└── logs/                  # ログ出力先
+│   ├── api.php                # APIルート
+│   ├── web.php                # SPAフォールバック
+│   └── console.php            # コンソールルート・スケジューリング
+├── storage/
+├── composer.json              # PHP依存関係
+├── package.json               # Node.js依存関係
+├── vite.config.ts             # Vite設定 (Laravel統合)
+├── tsconfig.json
+├── tailwind.config.js
+└── setup.sh                   # ワンコマンドセットアップ
 ```
 
-## 重要な設定
+## セットアップ
 
-### サブディレクトリパス
-このシステムは `/autosurvey/` サブディレクトリで動作する設計:
+### ワンコマンドセットアップ
 
-- **バックエンド**: `BASE_PATH` 環境変数（デフォルト: `/autosurvey`）
-- **フロントエンド**: `vite.config.js` の `base: '/autosurvey/'`
-- **APIクライアント**: `api.js` で `import.meta.env.BASE_URL` を使用
-
-### 環境変数（.env）
-```env
-# 必須
-DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-SESSION_SECRET
-BASE_PATH=/autosurvey
-
-# AI（どちらか必須）
-CLAUDE_API_KEY または OPENAI_API_KEY
-AI_PROVIDER=claude  # または openai
-```
-
-## よく使うコマンド
-
-### 開発
 ```bash
-# 依存関係インストール
-npm run install:all
+./setup.sh
+```
 
-# 開発サーバー起動（両方同時）
-npm run dev:all
+実行内容：
+1. Composer依存関係インストール
+2. npm依存関係インストール
+3. .env作成・APP_KEY生成
+4. データベースマイグレーション
+5. フロントエンドビルド（Vite）
+6. 本番用キャッシュ生成
 
-# バックエンドのみ
+### 手動セットアップ
+
+```bash
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+npm run build
+```
+
+## Apache設定
+
+`https://{your-domain}.org/autosurvey/` でアクセスする場合：
+
+```apache
+Alias /autosurvey /path/to/AutoSurvey/public
+
+<Directory /path/to/AutoSurvey/public>
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+必要なモジュール:
+```bash
+sudo a2enmod rewrite headers deflate expires
+sudo systemctl restart apache2
+```
+
+パーミッション:
+```bash
+sudo chown -R www-data:www-data storage bootstrap/cache
+sudo chmod -R 775 storage bootstrap/cache
+```
+
+## 開発コマンド
+
+```bash
+# 開発サーバー（Vite + Laravel）
+php artisan serve &
 npm run dev
 
-# フロントエンドのみ
-npm run dev:frontend
-```
+# ユーザー作成
+php artisan user:create
 
-### 本番
-```bash
-# ビルド
+# RSS取得
+php artisan rss:fetch
+php artisan rss:fetch --list
+
+# 本番ビルド
 npm run build
 
-# 起動
-npm start
-```
+# キャッシュクリア
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
 
-### データベース
-```bash
-# スキーマ適用
-npm run db:setup
-
-# ユーザー作成
-node scripts/create-user.js <username> <password> [--admin]
-
-# 手動RSS取得
-node scripts/fetch-now.js [journal-id]
+# スケジュール確認
+php artisan schedule:list
 ```
 
 ## API構造
 
+すべてのAPIは `/api/*` でアクセス（Apacheの場合は `/autosurvey/api/*`）
+
 ### 認証
-- `POST /autosurvey/api/auth/login` - ログイン
-- `POST /autosurvey/api/auth/logout` - ログアウト
-- `GET /autosurvey/api/auth/me` - 認証状態確認
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 
-### 論文誌（要認証）
-- `GET /autosurvey/api/journals` - 一覧取得
-- `POST /autosurvey/api/admin/journals` - 追加（管理者）
-- `PUT /autosurvey/api/admin/journals/:id` - 更新（管理者）
-- `DELETE /autosurvey/api/admin/journals/:id` - 無効化（管理者）
-- `POST /autosurvey/api/admin/journals/test-rss` - RSSテスト（管理者）
+### 論文・論文誌
+- `GET /api/papers`
+- `GET /api/papers/{id}`
+- `GET /api/journals`
 
-### 論文（要認証）
-- `GET /autosurvey/api/papers` - 一覧（フィルタ対応）
-- `GET /autosurvey/api/papers/:id` - 詳細
+### AI要約
+- `GET /api/summaries/providers`
+- `POST /api/summaries/generate`
 
-### AI要約（要認証）
-- `GET /autosurvey/api/summaries/providers` - 利用可能AI一覧
-- `POST /autosurvey/api/summaries/generate` - 要約生成
-
-## データベーススキーマ
-
-### 主要テーブル
-- `users` - ユーザー
-- `sessions` - セッション
-- `journals` - 論文誌（RSSフィード源）
-- `papers` - 論文
-- `summaries` - AI要約
-- `fetch_logs` - 取得ログ
-
-### 主要ビュー
-- `papers_with_journals` - 論文+論文誌情報
-- `papers_with_summaries` - 論文+要約情報
-- `journal_stats` - 論文誌統計
+### 管理
+- `POST /api/admin/journals`
+- `PUT /api/admin/journals/{id}`
+- `DELETE /api/admin/journals/{id}`
 
 ## コーディング規約
 
-### JavaScript
-- ES6+構文使用
-- async/await優先
-- エラーは適切にtry-catchで捕捉
-- ログはwinstonロガーを使用
+### PHP
+- PHP 8.2+ の機能を使用可能
+- Constructor property promotion 使用可
+- Nullsafe演算子（?->）使用可
+- Arrow functions (fn) 使用可
+- Match式 使用可
 
-### React
+### TypeScript/React
 - 関数コンポーネント + Hooks
 - Tailwind CSSでスタイリング
-- Lucide Reactでアイコン
+- `resources/ts/` 配下に配置
 
-### SQL
-- プリペアドステートメント必須（SQLインジェクション防止）
-- トランザクションは必要に応じて使用
+## 環境変数（.env）
 
-## トラブルシューティング
+```env
+APP_NAME=AutoSurvey
+APP_ENV=production
+APP_DEBUG=false
 
-### MySQLプロシージャエラー
-phpMyAdminでは`DELIMITER`構文がエラーになる場合あり．
-テーブル定義とプロシージャを分割してインポート．
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_DATABASE=autosurvey
+DB_USERNAME=your_user
+DB_PASSWORD=your_password
 
-### CORS エラー
-開発時は `ALLOWED_ORIGINS` に `http://localhost:5173` を含める．
-
-### セッションが切れる
-`SESSION_EXPIRES` を確認（デフォルト: 86400秒 = 24時間）
+AI_PROVIDER=claude
+CLAUDE_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
 
 ## 注意事項
 
-- 本番環境では必ず `NODE_ENV=production` を設定
-- `SESSION_SECRET` は強力なランダム文字列を使用
+- lock ファイル（composer.lock, package-lock.json）は.gitignoreで除外
+- `APP_KEY` は `php artisan key:generate` で生成
 - AIのAPIキーは絶対にコミットしない
-- ログファイルは定期的にローテーション推奨
