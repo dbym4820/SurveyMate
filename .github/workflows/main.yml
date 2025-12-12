@@ -28,3 +28,6 @@ jobs:
                 git pull origin main
 
                 sh setup.sh
+
+                git add .
+                git commit -m "tmp update"
