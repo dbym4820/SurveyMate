@@ -33,3 +33,12 @@ jobs:
 
                 # セットアップ実行
                 sh setup.sh
+
+                # Webサーバー用パーミッション設定
+                # Bitnamiでは daemon, 一般的には www-data
+                WEB_USER="daemon"
+                if ! id "$WEB_USER" >/dev/null 2>&1; then
+                  WEB_USER="www-data"
+                fi
+                sudo chown -R $WEB_USER:$WEB_USER storage bootstrap/cache
+                sudo chmod -R 777 storage bootstrap/cache
