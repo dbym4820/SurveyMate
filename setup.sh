@@ -156,8 +156,42 @@ mkdir -p storage/framework/views
 mkdir -p storage/logs
 mkdir -p bootstrap/cache
 
-# Set permissions
+# Set permissions for Laravel writable directories
+echo "  Setting permissions for storage and bootstrap/cache..."
+
+# Detect web server user
+WEB_USER=""
+for user in www-data apache nginx daemon http _www; do
+    if id "$user" >/dev/null 2>&1; then
+        WEB_USER="$user"
+        break
+    fi
+done
+
+# Get current user
+CURRENT_USER=$(whoami)
+
+# Set ownership and permissions
+if [ -n "$WEB_USER" ]; then
+    echo "  Detected web server user: $WEB_USER"
+
+    # If running as root or with sudo capability, change ownership
+    if [ "$CURRENT_USER" = "root" ] || sudo -n true 2>/dev/null; then
+        echo "  Setting ownership to $WEB_USER..."
+        sudo chown -R "$WEB_USER":"$WEB_USER" storage bootstrap/cache 2>/dev/null || \
+        chown -R "$WEB_USER":"$WEB_USER" storage bootstrap/cache 2>/dev/null || true
+    else
+        echo "  Note: Run with sudo to set proper ownership for web server"
+    fi
+fi
+
+# Set permissions (777 ensures web server can write regardless of ownership)
+chmod -R 777 storage bootstrap/cache 2>/dev/null || \
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+
+# Create .gitkeep files
+touch storage/logs/.gitkeep 2>/dev/null || true
+touch bootstrap/cache/.gitkeep 2>/dev/null || true
 
 echo "  Environment: Complete"
 echo ""
@@ -365,6 +399,11 @@ else
     echo "  Optimization: Skipped (dev mode)"
 fi
 
+# Final permission fix (after cache generation)
+echo "  Ensuring final permissions..."
+chmod -R 777 storage bootstrap/cache 2>/dev/null || \
+chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+
 echo ""
 
 #######################################
@@ -400,4 +439,9 @@ echo "   https://your-domain.org/surveymate/"
 echo ""
 echo "For development server:"
 echo "   $PHP_BIN artisan serve"
+echo ""
+echo "Troubleshooting permissions (if you see 'Permission denied' errors):"
+echo "   sudo chown -R www-data:www-data storage bootstrap/cache"
+echo "   sudo chmod -R 777 storage bootstrap/cache"
+echo "   (Replace 'www-data' with your web server user: apache, nginx, daemon, etc.)"
 echo ""
