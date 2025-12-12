@@ -74,7 +74,7 @@ export default function ResearchPerspectiveModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <Compass className="w-5 h-5 text-indigo-600" />
+            <Compass className="w-5 h-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">調査観点設定</h2>
           </div>
           <button
@@ -107,7 +107,7 @@ export default function ResearchPerspectiveModal({
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
             </div>
           ) : (
             <div className="space-y-6">
@@ -128,7 +128,7 @@ export default function ResearchPerspectiveModal({
                   onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setResearchFields(e.target.value)}
                   placeholder="例：自然言語処理，特に大規模言語モデルの効率化と知識蒸留に関心があります．また，マルチモーダル学習や対話システムにも興味を持っています．"
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 resize-none"
                   maxLength={2000}
                 />
                 <p className="text-xs text-gray-400 mt-1 text-right">
@@ -149,7 +149,7 @@ export default function ResearchPerspectiveModal({
                   onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setSummaryPerspective(e.target.value)}
                   placeholder="例：技術的な新規性や提案手法の詳細を重視してください．また，ベースライン手法との比較結果や実験設定も詳しく知りたいです．"
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 resize-none"
                   maxLength={2000}
                 />
                 <p className="text-xs text-gray-400 mt-1 text-right">
@@ -170,7 +170,7 @@ export default function ResearchPerspectiveModal({
                   onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReadingFocus(e.target.value)}
                   placeholder="例：まず手法のアーキテクチャ図を確認し，次に実験結果の表を見ます．特にアブレーション研究の結果に注目し，各コンポーネントの貢献度を把握します．"
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 resize-none"
                   maxLength={2000}
                 />
                 <p className="text-xs text-gray-400 mt-1 text-right">
@@ -192,7 +192,7 @@ export default function ResearchPerspectiveModal({
           <button
             onClick={handleSave}
             disabled={saving || loading}
-            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />

@@ -117,7 +117,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
         onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-gray-500 to-purple-500 text-white">
           <div className="flex items-center gap-3">
             <span className={`w-4 h-4 rounded-full ${tag.color}`} />
             <div>
@@ -139,7 +139,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
           {/* 新規要約生成フォーム */}
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
             <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-500" />
+              <Sparkles className="w-4 h-4 text-gray-500" />
               新しい要約を生成
             </h3>
 
@@ -153,7 +153,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
                   value={perspectivePrompt}
                   onChange={(e) => setPerspectivePrompt(e.target.value)}
                   placeholder="例: 教育工学の観点から、これらの論文が示唆する実践的な応用可能性について要約してください"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                   rows={3}
                   disabled={generating}
                 />
@@ -165,7 +165,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
                   <button
                     key={example}
                     onClick={() => setPerspectivePrompt(example)}
-                    className="text-xs px-2 py-1 bg-white border border-gray-300 rounded-full hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                    className="text-xs px-2 py-1 bg-white border border-gray-300 rounded-full hover:border-gray-400 hover:text-gray-600 transition-colors"
                     disabled={generating}
                   >
                     {example}
@@ -176,7 +176,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
               <button
                 onClick={generateSummary}
                 disabled={!perspectivePrompt.trim() || generating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-500 to-purple-500 text-white rounded-lg hover:from-gray-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
               >
                 {generating ? (
                   <>
@@ -199,7 +199,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
 
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
               </div>
             ) : summaries.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -252,7 +252,7 @@ export default function TagSummaryModal({ tag, onClose }: TagSummaryModalProps):
                   {/* 要約本文 */}
                   {expandedSummaryId === summary.id && (
                     <div className="px-4 pb-4 border-t border-gray-100">
-                      <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg">
+                      <div className="mt-3 p-3 bg-gradient-to-r from-gray-50 to-purple-50 rounded-lg">
                         <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
                           {summary.summary_text}
                         </pre>

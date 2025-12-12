@@ -96,7 +96,7 @@ export default function JournalManagement(): JSX.Element {
               setEditingJournal(null);
               setShowModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
             新しい論文誌を追加
@@ -111,7 +111,7 @@ export default function JournalManagement(): JSX.Element {
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`w-10 h-6 rounded-full transition-colors ${
-                showInactive ? 'bg-indigo-600' : 'bg-gray-300'
+                showInactive ? 'bg-gray-600' : 'bg-gray-300'
               }`}
             >
               <div
@@ -126,7 +126,7 @@ export default function JournalManagement(): JSX.Element {
         {/* 論文誌リスト */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
           </div>
         ) : (
           <div className="grid gap-4">
@@ -175,7 +175,7 @@ export default function JournalManagement(): JSX.Element {
                       <button
                         onClick={() => handleFetchNow(journal)}
                         disabled={fetchingJournal === journal.id}
-                        className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 text-gray-600 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
                         title="今すぐ取得"
                       >
                         {fetchingJournal === journal.id ? (
@@ -187,7 +187,7 @@ export default function JournalManagement(): JSX.Element {
                     )}
                     <button
                       onClick={() => handleEdit(journal)}
-                      className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-600 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                       title="編集"
                     >
                       <Edit className="w-4 h-4" />

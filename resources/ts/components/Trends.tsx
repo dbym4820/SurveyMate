@@ -189,13 +189,13 @@ export default function Trends(): JSX.Element {
                 onClick={() => setSelectedPeriod(period.id)}
                 className={`p-4 rounded-xl border-2 transition-all text-left ${
                   isSelected
-                    ? 'border-indigo-500 bg-indigo-50'
+                    ? 'border-gray-500 bg-gray-50'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Calendar className={`w-5 h-5 ${isSelected ? 'text-indigo-600' : 'text-gray-400'}`} />
-                  <span className={`font-semibold ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>
+                  <Calendar className={`w-5 h-5 ${isSelected ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <span className={`font-semibold ${isSelected ? 'text-gray-900' : 'text-gray-900'}`}>
                     {period.label}
                   </span>
                 </div>
@@ -203,7 +203,7 @@ export default function Trends(): JSX.Element {
                 {isLoadingStats ? (
                   <div className="h-6 bg-gray-200 rounded animate-pulse" />
                 ) : (
-                  <p className={`text-2xl font-bold ${isSelected ? 'text-indigo-600' : 'text-gray-900'}`}>
+                  <p className={`text-2xl font-bold ${isSelected ? 'text-gray-600' : 'text-gray-900'}`}>
                     {periodStats?.count ?? 0}
                     <span className="text-sm font-normal text-gray-500 ml-1">件</span>
                   </p>
@@ -228,7 +228,7 @@ export default function Trends(): JSX.Element {
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-lg">
+                <div className="p-2 bg-gradient-to-br from-purple-500 to-gray-500 rounded-lg">
                   <TrendingUp className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -246,7 +246,7 @@ export default function Trends(): JSX.Element {
                     <select
                       value={selectedProvider}
                       onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                     >
                       {aiProviders.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -259,7 +259,7 @@ export default function Trends(): JSX.Element {
                 <button
                   onClick={generateSummary}
                   disabled={isGenerating || papers.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isGenerating ? (
                     <>
@@ -305,7 +305,7 @@ export default function Trends(): JSX.Element {
                       <div key={index} className="p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-semibold text-gray-900">{topic.topic}</span>
-                          <span className="text-sm text-indigo-600 font-medium">
+                          <span className="text-sm text-gray-600 font-medium">
                             {topic.paperCount}件
                           </span>
                         </div>
@@ -326,7 +326,7 @@ export default function Trends(): JSX.Element {
                   <ul className="space-y-2">
                     {summary.emergingTrends.map((trend, index) => (
                       <li key={index} className="flex items-start gap-2">
-                        <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
+                        <span className="w-6 h-6 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                           {index + 1}
                         </span>
                         <span className="text-gray-700">{trend}</span>
@@ -407,7 +407,7 @@ export default function Trends(): JSX.Element {
             <div className="border-t border-gray-200">
               {isLoadingPapers ? (
                 <div className="p-8 text-center">
-                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+                  <Loader2 className="w-8 h-8 text-gray-500 animate-spin mx-auto" />
                 </div>
               ) : papers.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">

@@ -217,7 +217,7 @@ export default function TagManagement(): JSX.Element {
           </div>
           <button
             onClick={() => openModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
             新しいTagを作成
@@ -227,7 +227,7 @@ export default function TagManagement(): JSX.Element {
         {/* タグ一覧 */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
           </div>
         ) : tags.length === 0 ? (
           <div className="text-center py-16">
@@ -266,7 +266,7 @@ export default function TagManagement(): JSX.Element {
                         e.stopPropagation();
                         openModal(tag);
                       }}
-                      className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      className="p-1.5 text-gray-500 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                       title="編集"
                     >
                       <Edit className="w-4 h-4" />
@@ -313,7 +313,7 @@ export default function TagManagement(): JSX.Element {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                     placeholder="例: 機械学習"
                   />
                 </div>
@@ -329,7 +329,7 @@ export default function TagManagement(): JSX.Element {
                         onClick={() => setFormData({ ...formData, color: color.id })}
                         className={`w-8 h-8 rounded-full ${color.id} ${
                           formData.color === color.id
-                            ? 'ring-2 ring-offset-2 ring-indigo-500'
+                            ? 'ring-2 ring-offset-2 ring-gray-500'
                             : ''
                         }`}
                         title={color.name}
@@ -345,7 +345,7 @@ export default function TagManagement(): JSX.Element {
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 resize-none"
                     rows={3}
                     placeholder="このTagの説明を入力..."
                   />
@@ -362,7 +362,7 @@ export default function TagManagement(): JSX.Element {
                 <button
                   onClick={handleSave}
                   disabled={!formData.name.trim() || saving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   {editingTag ? '更新' : '作成'}
@@ -382,7 +382,7 @@ export default function TagManagement(): JSX.Element {
       <div className="mb-6">
         <button
           onClick={() => navigate('/tags')}
-          className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 mb-4 transition-colors"
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-600 mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Tagグループ一覧に戻る
@@ -405,7 +405,7 @@ export default function TagManagement(): JSX.Element {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => openModal(selectedTag)}
-                className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                className="p-2 text-gray-600 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                 title="編集"
               >
                 <Edit className="w-5 h-5" />
@@ -424,12 +424,12 @@ export default function TagManagement(): JSX.Element {
 
       {/* グループ要約セクション */}
       {tagPapers.length > 0 && (
-        <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 overflow-hidden">
+        <div className="mb-6 bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl border border-gray-200 overflow-hidden">
           {/* 要約ヘッダー */}
-          <div className="px-5 py-4 border-b border-indigo-200 bg-white/50">
+          <div className="px-5 py-4 border-b border-gray-200 bg-white/50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-600" />
+                <Sparkles className="w-5 h-5 text-gray-600" />
                 <h2 className="font-semibold text-gray-900">グループ要約</h2>
                 {latestSummary && (
                   <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full">
@@ -440,7 +440,7 @@ export default function TagManagement(): JSX.Element {
               {latestSummary && (
                 <button
                   onClick={() => setSummaryExpanded(!summaryExpanded)}
-                  className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-500 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   {summaryExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                 </button>
@@ -450,7 +450,7 @@ export default function TagManagement(): JSX.Element {
 
           {/* 要約本文（展開時） */}
           {latestSummary && summaryExpanded && (
-            <div className="p-5 border-b border-indigo-200">
+            <div className="p-5 border-b border-gray-200">
               <div className="bg-white rounded-lg p-4 shadow-sm">
                 <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
                   {latestSummary.summary_text}
@@ -478,7 +478,7 @@ export default function TagManagement(): JSX.Element {
                   value={perspectivePrompt}
                   onChange={(e) => setPerspectivePrompt(e.target.value)}
                   placeholder="例: 教育工学の観点から、これらの論文が示唆する実践的な応用可能性について"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 bg-white"
                   rows={2}
                   disabled={generating}
                 />
@@ -490,7 +490,7 @@ export default function TagManagement(): JSX.Element {
               <button
                 onClick={generateGroupSummary}
                 disabled={!perspectivePrompt.trim() || generating || tagPapers.length === 0}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-500 to-purple-500 text-white rounded-lg hover:from-gray-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
               >
                 {generating ? (
                   <>
@@ -517,7 +517,7 @@ export default function TagManagement(): JSX.Element {
       {/* 論文一覧 */}
       {loadingPapers ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
         </div>
       ) : tagPapers.length === 0 ? (
         <div className="text-center py-16">
@@ -565,7 +565,7 @@ export default function TagManagement(): JSX.Element {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                 />
               </div>
 
@@ -578,7 +578,7 @@ export default function TagManagement(): JSX.Element {
                       onClick={() => setFormData({ ...formData, color: color.id })}
                       className={`w-8 h-8 rounded-full ${color.id} ${
                         formData.color === color.id
-                          ? 'ring-2 ring-offset-2 ring-indigo-500'
+                          ? 'ring-2 ring-offset-2 ring-gray-500'
                           : ''
                       }`}
                       title={color.name}
@@ -594,7 +594,7 @@ export default function TagManagement(): JSX.Element {
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 resize-none"
                   rows={3}
                   placeholder="このタグの説明を入力..."
                 />
@@ -617,7 +617,7 @@ export default function TagManagement(): JSX.Element {
                   }
                 }}
                 disabled={!formData.name.trim() || saving}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 更新

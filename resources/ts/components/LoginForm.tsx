@@ -107,11 +107,11 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 via-purple-50 to-pink-100 px-4 py-8">
       <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
-          <div className="p-2 sm:p-3 bg-indigo-100 rounded-xl">
-            <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
+          <div className="p-2 sm:p-3 bg-gray-100 rounded-xl">
+            <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600" />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">SurveyMate</h1>
@@ -125,7 +125,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             onClick={() => switchMode('login')}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
               mode === 'login'
-                ? 'bg-white text-indigo-600 shadow-sm'
+                ? 'bg-white text-gray-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -136,7 +136,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             onClick={() => switchMode('register')}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
               mode === 'register'
-                ? 'bg-white text-indigo-600 shadow-sm'
+                ? 'bg-white text-gray-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -169,7 +169,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
               name="username"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
               placeholder={mode === 'register' ? '3〜50文字の英数字（ログイン時に使用）' : 'ユーザーIDを入力'}
               required
               autoComplete="username"
@@ -189,7 +189,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
                 placeholder="画面に表示される名前"
                 required
                 autoComplete="name"
@@ -208,7 +208,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
                 placeholder="example@example.com"
                 autoComplete="email"
               />
@@ -225,7 +225,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
               name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
               placeholder={mode === 'register' ? '8文字以上' : 'パスワードを入力'}
               required
               autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
@@ -242,7 +242,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
                 placeholder="パスワードを再入力"
                 required
                 autoComplete="new-password"
@@ -253,7 +253,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors"
+            className="w-full py-2.5 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />

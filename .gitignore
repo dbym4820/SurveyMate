@@ -57,4 +57,4 @@ yarn-error.log*
 *.cache
 
 # Generated files
-/public/icon-*.png
+# /public/icon-*.png  # PWA icons are now tracked

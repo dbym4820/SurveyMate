@@ -62,7 +62,7 @@ export default function Header({
               onClick={() => onNavigate('papers')}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'papers'
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -74,7 +74,7 @@ export default function Header({
               onClick={() => onNavigate('trends')}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'trends'
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -86,7 +86,7 @@ export default function Header({
               onClick={() => onNavigate('tags')}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'tags'
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -98,7 +98,7 @@ export default function Header({
               <button
                 onClick={onManualFetch}
                 disabled={isRefreshing}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 {isRefreshing ? '取得中...' : 'フィード取得'}
@@ -114,7 +114,7 @@ export default function Header({
                 <UserIcon className="w-4 h-4 text-gray-600" />
                 <span className="text-sm font-medium text-gray-700">{user.username}</span>
                 {user.isAdmin && (
-                  <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                  <span className="text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
                     管理者
                   </span>
                 )}
@@ -130,7 +130,7 @@ export default function Header({
                     }}
                     className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
                       currentPage === 'journals'
-                        ? 'bg-indigo-50 text-indigo-700'
+                        ? 'bg-gray-50 text-gray-700'
                         : 'hover:bg-gray-50 text-gray-700'
                     }`}
                   >
@@ -154,7 +154,7 @@ export default function Header({
                     }}
                     className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
                       currentPage === 'settings'
-                        ? 'bg-indigo-50 text-indigo-700'
+                        ? 'bg-gray-50 text-gray-700'
                         : 'hover:bg-gray-50 text-gray-700'
                     }`}
                   >
@@ -183,7 +183,7 @@ export default function Header({
               <button
                 onClick={onManualFetch}
                 disabled={isRefreshing}
-                className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
@@ -205,7 +205,7 @@ export default function Header({
                 onClick={() => handleNavigate('papers')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'papers'
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-gray-50 text-gray-700'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -217,7 +217,7 @@ export default function Header({
                 onClick={() => handleNavigate('trends')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'trends'
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-gray-50 text-gray-700'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -229,7 +229,7 @@ export default function Header({
                 onClick={() => handleNavigate('tags')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'tags'
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-gray-50 text-gray-700'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -241,7 +241,7 @@ export default function Header({
                 onClick={() => handleNavigate('journals')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'journals'
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-gray-50 text-gray-700'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -264,7 +264,7 @@ export default function Header({
                 onClick={() => handleNavigate('settings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'settings'
-                    ? 'bg-indigo-50 text-indigo-700'
+                    ? 'bg-gray-50 text-gray-700'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -278,7 +278,7 @@ export default function Header({
                     <UserIcon className="w-5 h-5 text-gray-600" />
                     <span className="font-medium text-gray-700">{user.username}</span>
                     {user.isAdmin && (
-                      <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                      <span className="text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
                         管理者
                       </span>
                     )}

@@ -208,7 +208,7 @@ export default function PaperList(): JSX.Element {
                     <div className="flex justify-between mb-3">
                       <button
                         onClick={() => setSelectedJournals(journals.map((j) => j.id))}
-                        className="text-xs text-indigo-600 hover:underline"
+                        className="text-xs text-gray-600 hover:underline"
                       >
                         すべて選択
                       </button>
@@ -229,7 +229,7 @@ export default function PaperList(): JSX.Element {
                             type="checkbox"
                             checked={selectedJournals.includes(journal.id)}
                             onChange={() => toggleJournal(journal.id)}
-                            className="w-4 h-4 text-indigo-600 rounded"
+                            className="w-4 h-4 text-gray-600 rounded"
                           />
                           <span className={`w-3 h-3 rounded-full flex-shrink-0 ${journal.color}`} />
                           <div className="flex-1 min-w-0">
@@ -251,13 +251,13 @@ export default function PaperList(): JSX.Element {
                   <button
                     onClick={() => setShowTagFilter(!showTagFilter)}
                     className={`flex items-center gap-2 px-3 sm:px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors text-sm ${
-                      selectedTags.length > 0 ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-300'
+                      selectedTags.length > 0 ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300'
                     }`}
                   >
                     <Tag className="w-4 h-4" />
                     <span className="hidden xs:inline">Tag</span>
                     {selectedTags.length > 0 && (
-                      <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      <span className="bg-gray-600 text-white text-xs px-1.5 py-0.5 rounded-full">
                         {selectedTags.length}
                       </span>
                     )}
@@ -293,7 +293,7 @@ export default function PaperList(): JSX.Element {
                                 type="checkbox"
                                 checked={selectedTags.includes(tag.id)}
                                 onChange={() => toggleTag(tag.id)}
-                                className="w-4 h-4 text-indigo-600 rounded"
+                                className="w-4 h-4 text-gray-600 rounded"
                               />
                               <span className={`w-3 h-3 rounded-full flex-shrink-0 ${tag.color}`} />
                               <div className="flex-1 min-w-0">
@@ -311,7 +311,7 @@ export default function PaperList(): JSX.Element {
                                   openTagSummary(tag);
                                   setShowTagFilter(false);
                                 }}
-                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded opacity-0 group-hover:opacity-100 transition-all"
                                 title="タグの論文を要約"
                               >
                                 <BookOpen className="w-4 h-4" />
@@ -339,7 +339,7 @@ export default function PaperList(): JSX.Element {
                 <select
                   value={dateFilter}
                   onChange={(e: ChangeEvent<HTMLSelectElement>) => setDateFilter(e.target.value)}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                 >
                   {DATE_FILTERS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -356,7 +356,7 @@ export default function PaperList(): JSX.Element {
                   <select
                     value={selectedProvider}
                     onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                   >
                     {aiProviders.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -378,7 +378,7 @@ export default function PaperList(): JSX.Element {
         {/* Paper list */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
           </div>
         ) : (
           <div className="space-y-4">

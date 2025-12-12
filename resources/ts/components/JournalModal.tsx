@@ -125,7 +125,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
               value={formData.name}
               onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('name', e.target.value)}
               placeholder="例: International Journal of Artificial Intelligence in Education"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
             />
             <p className="text-xs text-gray-500 mt-1">論文誌の正式名称（IDは自動生成されます）</p>
           </div>
@@ -141,7 +141,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                 value={formData.rssUrl}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('rssUrl', e.target.value)}
                 placeholder="https://..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
               />
               <button
                 type="button"
@@ -196,7 +196,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                   onClick={() => handleChange('color', color.id)}
                   className={`w-8 h-8 rounded-lg transition-all ${color.id} ${
                     formData.color === color.id
-                      ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110'
+                      ? 'ring-2 ring-offset-2 ring-gray-500 scale-110'
                       : 'hover:scale-105'
                   }`}
                   title={color.name}
@@ -217,7 +217,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2 transition-colors"
+              className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2 transition-colors"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

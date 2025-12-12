@@ -13,7 +13,7 @@
     <title>SurveyMate</title>
     <meta name="description" content="学術論文RSS集約・AI要約システム">
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#4b5563">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="SurveyMate">

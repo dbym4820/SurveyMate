@@ -328,7 +328,7 @@ export default function Settings(): JSX.Element {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
       </div>
     );
   }
@@ -356,7 +356,7 @@ export default function Settings(): JSX.Element {
       {/* Profile */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
-          <User className="w-5 h-5 text-indigo-600" />
+          <User className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">プロフィール</h2>
         </div>
         <p className="text-sm text-gray-500 mb-4">
@@ -383,7 +383,7 @@ export default function Settings(): JSX.Element {
               value={editUsername}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setEditUsername(e.target.value)}
               placeholder="表示名を入力"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
             />
           </div>
 
@@ -397,7 +397,7 @@ export default function Settings(): JSX.Element {
               value={editEmail}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setEditEmail(e.target.value)}
               placeholder="example@example.com"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
             />
           </div>
 
@@ -407,7 +407,7 @@ export default function Settings(): JSX.Element {
               type="button"
               onClick={handleSaveProfile}
               disabled={savingProfile || !editUsername.trim()}
-              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {savingProfile ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -451,7 +451,7 @@ export default function Settings(): JSX.Element {
               value={openaiApiKey}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setOpenaiApiKey(e.target.value)}
               placeholder={settings?.openai_api_key_set ? '新しいキーを入力して更新' : 'sk-...'}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 font-mono text-sm"
             />
             <button
               type="button"
@@ -465,7 +465,7 @@ export default function Settings(): JSX.Element {
             type="button"
             onClick={handleSaveOpenaiKey}
             disabled={savingOpenai || !openaiApiKey}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {savingOpenai ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -518,7 +518,7 @@ export default function Settings(): JSX.Element {
               value={claudeApiKey}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setClaudeApiKey(e.target.value)}
               placeholder={settings?.claude_api_key_set ? '新しいキーを入力して更新' : 'sk-ant-...'}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 font-mono text-sm"
             />
             <button
               type="button"
@@ -532,7 +532,7 @@ export default function Settings(): JSX.Element {
             type="button"
             onClick={handleSaveClaudeKey}
             disabled={savingClaude || !claudeApiKey}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {savingClaude ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -569,7 +569,7 @@ export default function Settings(): JSX.Element {
           <select
             value={preferredProvider}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => setPreferredProvider(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
           >
             <option value="openai">OpenAI (GPT)</option>
             <option value="claude">Claude (Anthropic)</option>
@@ -584,7 +584,7 @@ export default function Settings(): JSX.Element {
           <select
             value={preferredOpenaiModel}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => setPreferredOpenaiModel(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
           >
             {openaiModels.map((modelId) => (
               <option key={modelId} value={modelId}>
@@ -602,7 +602,7 @@ export default function Settings(): JSX.Element {
           <select
             value={preferredClaudeModel}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => setPreferredClaudeModel(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
           >
             {claudeModels.map((modelId) => (
               <option key={modelId} value={modelId}>
@@ -618,7 +618,7 @@ export default function Settings(): JSX.Element {
             type="button"
             onClick={handleSavePreferences}
             disabled={savingPreferences}
-            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
           >
             {savingPreferences ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -633,7 +633,7 @@ export default function Settings(): JSX.Element {
       {/* Push Notifications */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
-          <Bell className="w-5 h-5 text-indigo-600" />
+          <Bell className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">プッシュ通知</h2>
         </div>
         <p className="text-sm text-gray-500 mb-4">
@@ -689,7 +689,7 @@ export default function Settings(): JSX.Element {
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
                 pushSubscribed
                   ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  : 'bg-gray-600 text-white hover:bg-gray-700'
               }`}
             >
               {pushLoading ? (
