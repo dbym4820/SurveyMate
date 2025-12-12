@@ -10,13 +10,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>AutoSurvey</title>
+    <title>SurveyMate</title>
     <meta name="description" content="学術論文RSS集約・AI要約システム">
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="AutoSurvey">
+    <meta name="apple-mobile-web-app-title" content="SurveyMate">
     <link rel="manifest" href="{{ $baseUrl }}/manifest.json">
     <link rel="icon" href="{{ $baseUrl }}/favicon.ico" type="image/x-icon">
     <link rel="shortcut icon" href="{{ $baseUrl }}/favicon.ico" type="image/x-icon">

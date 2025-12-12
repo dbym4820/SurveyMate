@@ -13,16 +13,6 @@ export const AVAILABLE_COLORS: ColorOption[] = [
   { id: 'bg-gray-500', name: 'グレー', hex: '#6B7280' },
 ];
 
-export const CATEGORIES: string[] = [
-  'AIED',
-  'Learning Sciences',
-  'Cognitive Science',
-  'EdTech',
-  'Educational Psychology',
-  'Computer Science',
-  'Other',
-];
-
 export const DATE_FILTERS: DateFilter[] = [
   { value: 'week', label: '過去7日', days: 7 },
   { value: 'month', label: '過去30日', days: 30 },

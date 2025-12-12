@@ -2,32 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
+     *
+     * 管理者ユーザーはマイグレーション時に.envから自動作成されます．
+     * シーダーは必要に応じてサンプルデータの投入に使用してください．
      */
     public function run(): void
     {
-        // Create default admin user
-        User::updateOrCreate(
-            ['username' => 'admin'],
-            [
-                'password_hash' => Hash::make('admin123'),
-                'email' => 'admin@example.com',
-                'is_admin' => true,
-                'is_active' => true,
-            ]
-        );
-
-        // Seed journals
-        $this->call(JournalSeeder::class);
+        // シーダーは現在未使用
+        // 必要に応じてサンプル論文誌などを追加
     }
 }

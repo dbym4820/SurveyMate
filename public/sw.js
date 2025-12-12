@@ -1,5 +1,5 @@
-// Service Worker for AutoSurvey PWA
-const CACHE_NAME = 'autosurvey-v1';
+// Service Worker for SurveyMate PWA
+const CACHE_NAME = 'surveymate-v1';
 const urlsToCache = [
   './',
   './manifest.json',
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-  let data = { title: 'AutoSurvey', body: '新しい論文が追加されました' };
+  let data = { title: 'SurveyMate', body: '新しい論文が追加されました' };
 
   if (event.data) {
     try {
@@ -75,7 +75,7 @@ self.addEventListener('push', (event) => {
       { action: 'open', title: '開く' },
       { action: 'close', title: '閉じる' }
     ],
-    tag: 'autosurvey-notification',
+    tag: 'surveymate-notification',
     renotify: true
   };
 
@@ -97,7 +97,7 @@ self.addEventListener('notificationclick', (event) => {
       .then((clientList) => {
         // Check if there's already a window open
         for (const client of clientList) {
-          if (client.url.includes('autosurvey') && 'focus' in client) {
+          if (client.url.includes('surveymate') && 'focus' in client) {
             return client.focus();
           }
         }

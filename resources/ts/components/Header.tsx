@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
-  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X
+  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag
 } from 'lucide-react';
 import { getBasePath } from '../api';
 import type { User } from '../types';
 
-type PageType = 'papers' | 'journals' | 'settings' | 'trends';
+type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags';
 
 interface HeaderProps {
   user: User;
@@ -25,6 +25,19 @@ export default function Header({
   onManualFetch,
 }: HeaderProps): JSX.Element {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleNavigate = (page: PageType) => {
     onNavigate(page);
@@ -37,8 +50,8 @@ export default function Header({
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => handleNavigate('papers')}>
-            <img src={`${getBasePath()}/favicon.ico`} alt="AutoSurvey" className="w-7 h-7 sm:w-8 sm:h-8" />
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">AutoSurvey</h1>
+            <img src={`${getBasePath()}/favicon.ico`} alt="SurveyMate" className="w-7 h-7 sm:w-8 sm:h-8" />
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">SurveyMate</h1>
           </div>
 
           {/* Desktop Actions */}
@@ -56,27 +69,15 @@ export default function Header({
             </button>
 
             <button
-              onClick={() => onNavigate('settings')}
+              onClick={() => onNavigate('tags')}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                currentPage === 'settings'
+                currentPage === 'tags'
                   ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <Key className="w-4 h-4" />
-              API設定
-            </button>
-
-            <button
-              onClick={() => onNavigate('journals')}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                currentPage === 'journals'
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                  : 'border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <SettingsIcon className="w-4 h-4" />
-              論文誌管理
+              <Tag className="w-4 h-4" />
+              Tagグループ
             </button>
 
             {user.isAdmin && onManualFetch && (
@@ -90,23 +91,66 @@ export default function Header({
               </button>
             )}
 
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
-              <UserIcon className="w-4 h-4 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">{user.username}</span>
-              {user.isAdmin && (
-                <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
-                  管理者
-                </span>
+            {/* User Menu Dropdown */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <UserIcon className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">{user.username}</span>
+                {user.isAdmin && (
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                    管理者
+                  </span>
+                )}
+                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                  <button
+                    onClick={() => {
+                      onNavigate('journals');
+                      setUserMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
+                      currentPage === 'journals'
+                        ? 'bg-indigo-50 text-indigo-700'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <SettingsIcon className="w-4 h-4" />
+                    論文誌管理
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigate('settings');
+                      setUserMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
+                      currentPage === 'settings'
+                        ? 'bg-indigo-50 text-indigo-700'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <Key className="w-4 h-4" />
+                    API設定
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-left text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    ログアウト
+                  </button>
+                </div>
               )}
             </div>
-
-            <button
-              onClick={onLogout}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="ログアウト"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -143,6 +187,18 @@ export default function Header({
               >
                 <TrendingUp className="w-5 h-5" />
                 トレンド分析
+              </button>
+
+              <button
+                onClick={() => handleNavigate('tags')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentPage === 'tags'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <Tag className="w-5 h-5" />
+                Tagグループ
               </button>
 
               <button

@@ -10,18 +10,16 @@ return new class extends Migration
     {
         Schema::create('journals', function (Blueprint $table) {
             $table->string('id', 50)->primary();
-            $table->string('name', 100)->comment('略称');
-            $table->string('full_name', 255)->comment('正式名称');
-            $table->string('publisher', 100)->comment('出版社');
+            $table->unsignedBigInteger('user_id')->nullable()->comment('所有ユーザーID');
+            $table->string('name', 255)->comment('論文誌名');
             $table->string('rss_url', 500)->comment('RSSフィードURL');
-            $table->string('category', 100)->nullable()->comment('カテゴリ');
             $table->string('color', 50)->default('bg-gray-500')->comment('表示色（Tailwind）');
             $table->boolean('is_active')->default(true)->comment('有効フラグ');
             $table->dateTime('last_fetched_at')->nullable()->comment('最終取得日時');
             $table->timestamps();
 
+            $table->index('user_id');
             $table->index('is_active');
-            $table->index('category');
         });
     }
 

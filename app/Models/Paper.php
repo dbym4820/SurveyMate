@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Paper extends Model
@@ -36,9 +37,18 @@ class Paper extends Model
         return $this->hasMany(Summary::class);
     }
 
+    /**
+     * この論文についたタグ
+     */
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'paper_tag')
+            ->withPivot('created_at');
+    }
+
     public function scopeWithJournalInfo($query)
     {
-        return $query->with('journal:id,name,full_name,color,category');
+        return $query->with('journal:id,name,color');
     }
 
     public function scopeWithSummaries($query)
@@ -77,5 +87,34 @@ class Paper extends Model
         }
 
         return $query;
+    }
+
+    public function scopeForUser($query, $userId)
+    {
+        return $query->whereHas('journal', function ($q) use ($userId) {
+            $q->where('user_id', $userId);
+        });
+    }
+
+    /**
+     * 指定したタグIDを持つ論文をフィルタ
+     */
+    public function scopeWithTags($query, ?array $tagIds)
+    {
+        if (empty($tagIds)) {
+            return $query;
+        }
+
+        return $query->whereHas('tags', function ($q) use ($tagIds) {
+            $q->whereIn('tags.id', $tagIds);
+        });
+    }
+
+    /**
+     * タグ情報を含めて取得
+     */
+    public function scopeWithTagsInfo($query)
+    {
+        return $query->with('tags:id,name,color');
     }
 }

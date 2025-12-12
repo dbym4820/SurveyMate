@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('user_preferences', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->unique()->constrained()->onDelete('cascade')->comment('ユーザーID');
-            $table->string('preferred_ai_provider', 50)->default('claude')->comment('優先AIプロバイダ');
+            $table->string('preferred_ai_provider', 50)->default('openai')->comment('優先AIプロバイダ');
             $table->string('preferred_ai_model', 100)->nullable()->comment('優先AIモデル');
             $table->boolean('email_notifications')->default(false)->comment('メール通知');
             $table->boolean('daily_digest')->default(false)->comment('日次ダイジェスト');

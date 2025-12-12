@@ -12,6 +12,9 @@ import type {
   Journal,
   ApiSettings,
   ApiSettingsResponse,
+  TagsResponse,
+  TagResponse,
+  TagPapersResponse,
 } from './types';
 
 // ベースパス（現在のURLから自動検出）
@@ -73,15 +76,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   // 認証
   auth: {
-    login: (username: string, password: string): Promise<LoginResponse> =>
+    login: (userId: string, password: string): Promise<LoginResponse> =>
       request('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ user_id: userId, password }),
       }),
-    register: (username: string, password: string, email?: string): Promise<RegisterResponse> =>
+    register: (userId: string, username: string, password: string, email?: string): Promise<RegisterResponse> =>
       request('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ username, password, email }),
+        body: JSON.stringify({ user_id: userId, username, password, email }),
       }),
     logout: (): Promise<{ success: boolean }> =>
       request('/auth/logout', { method: 'POST' }),
@@ -93,7 +96,7 @@ export const api = {
   journals: {
     list: (all = false): Promise<JournalsResponse> =>
       request(`/journals${all ? '?all=true' : ''}`),
-    create: (data: JournalFormData): Promise<{ success: boolean; journal: Journal }> =>
+    create: (data: JournalFormData): Promise<{ success: boolean; journal: Journal; fetch_result?: FetchResult }> =>
       request('/admin/journals', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<JournalFormData>): Promise<{ success: boolean; journal: Journal }> =>
       request(`/admin/journals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -111,6 +114,7 @@ export const api = {
   papers: {
     list: (params: {
       journals?: string[];
+      tags?: number[];
       dateFrom?: string;
       dateTo?: string;
       search?: string;
@@ -119,6 +123,7 @@ export const api = {
     } = {}): Promise<PapersResponse> => {
       const query = new URLSearchParams();
       if (params.journals) query.set('journals', params.journals.join(','));
+      if (params.tags && params.tags.length > 0) query.set('tags', params.tags.join(','));
       if (params.dateFrom) query.set('dateFrom', params.dateFrom);
       if (params.dateTo) query.set('dateTo', params.dateTo);
       if (params.search) query.set('search', params.search);
@@ -126,6 +131,24 @@ export const api = {
       if (params.offset) query.set('offset', params.offset.toString());
       return request(`/papers?${query}`);
     },
+  },
+
+  // タグ
+  tags: {
+    list: (): Promise<TagsResponse> =>
+      request('/tags'),
+    create: (name: string, color?: string, description?: string): Promise<TagResponse> =>
+      request('/tags', { method: 'POST', body: JSON.stringify({ name, color, description }) }),
+    update: (id: number, data: { name?: string; color?: string; description?: string }): Promise<TagResponse> =>
+      request(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number): Promise<{ success: boolean; message: string }> =>
+      request(`/tags/${id}`, { method: 'DELETE' }),
+    papers: (tagId: number): Promise<TagPapersResponse> =>
+      request(`/tags/${tagId}/papers`),
+    addToPaper: (paperId: number, data: { tag_id?: number; tag_name?: string; color?: string; description?: string }): Promise<TagResponse> =>
+      request(`/papers/${paperId}/tags`, { method: 'POST', body: JSON.stringify(data) }),
+    removeFromPaper: (paperId: number, tagId: number): Promise<{ success: boolean; message: string }> =>
+      request(`/papers/${paperId}/tags/${tagId}`, { method: 'DELETE' }),
   },
 
   // AI要約
@@ -152,6 +175,8 @@ export const api = {
       claude_api_key?: string | null;
       openai_api_key?: string | null;
       preferred_ai_provider?: string;
+      preferred_openai_model?: string;
+      preferred_claude_model?: string;
     }): Promise<ApiSettingsResponse> =>
       request('/settings/api', { method: 'PUT', body: JSON.stringify(data) }),
     deleteApiKey: (provider: 'claude' | 'openai'): Promise<ApiSettingsResponse> =>

@@ -21,7 +21,7 @@ return new class extends Migration
             $table->text('overview')->nullable();
             $table->json('key_topics')->nullable();
             $table->json('emerging_trends')->nullable();
-            $table->json('category_insights')->nullable();
+            $table->json('journal_insights')->nullable();
             $table->json('recommendations')->nullable();
             $table->integer('paper_count')->default(0);
             $table->timestamps();

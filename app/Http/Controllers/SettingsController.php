@@ -25,6 +25,8 @@ class SettingsController extends Controller
             'openai_api_key_set' => $user->hasOpenaiApiKey(),
             'openai_api_key_masked' => $this->maskApiKey($user->openai_api_key),
             'preferred_ai_provider' => $user->preferred_ai_provider,
+            'preferred_openai_model' => $user->preferred_openai_model,
+            'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $user->getAvailableAiProviders(),
         ]);
     }
@@ -43,6 +45,8 @@ class SettingsController extends Controller
             'claude_api_key' => 'nullable|string|max:500',
             'openai_api_key' => 'nullable|string|max:500',
             'preferred_ai_provider' => 'nullable|string|in:claude,openai',
+            'preferred_openai_model' => 'nullable|string|max:100',
+            'preferred_claude_model' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -95,6 +99,18 @@ class SettingsController extends Controller
             $updated['preferred_ai_provider'] = $data['preferred_ai_provider'];
         }
 
+        // Update preferred OpenAI model
+        if (array_key_exists('preferred_openai_model', $data)) {
+            $user->preferred_openai_model = $data['preferred_openai_model'];
+            $updated['preferred_openai_model'] = $data['preferred_openai_model'];
+        }
+
+        // Update preferred Claude model
+        if (array_key_exists('preferred_claude_model', $data)) {
+            $user->preferred_claude_model = $data['preferred_claude_model'];
+            $updated['preferred_claude_model'] = $data['preferred_claude_model'];
+        }
+
         $user->save();
 
         return response()->json([
@@ -104,6 +120,8 @@ class SettingsController extends Controller
             'claude_api_key_set' => $user->hasClaudeApiKey(),
             'openai_api_key_set' => $user->hasOpenaiApiKey(),
             'preferred_ai_provider' => $user->preferred_ai_provider,
+            'preferred_openai_model' => $user->preferred_openai_model,
+            'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $user->getAvailableAiProviders(),
         ]);
     }
@@ -138,6 +156,9 @@ class SettingsController extends Controller
             'message' => ucfirst($provider) . ' API key removed successfully',
             'claude_api_key_set' => $user->hasClaudeApiKey(),
             'openai_api_key_set' => $user->hasOpenaiApiKey(),
+            'preferred_ai_provider' => $user->preferred_ai_provider,
+            'preferred_openai_model' => $user->preferred_openai_model,
+            'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $user->getAvailableAiProviders(),
         ]);
     }

@@ -29,12 +29,11 @@ class FetchRss extends Command
         if ($this->option('list')) {
             $journals = Journal::all();
             $this->table(
-                ['ID', 'Name', 'Full Name', 'Active', 'Last Fetched'],
+                ['ID', 'Name', 'Active', 'Last Fetched'],
                 $journals->map(function ($j) {
                     return [
                         $j->id,
-                        $j->name,
-                        substr($j->full_name, 0, 40) . (strlen($j->full_name) > 40 ? '...' : ''),
+                        substr($j->name, 0, 50) . (strlen($j->name) > 50 ? '...' : ''),
                         $j->is_active ? 'Yes' : 'No',
                         $j->last_fetched_at ? $j->last_fetched_at->format('Y-m-d H:i:s') : 'Never',
                     ];

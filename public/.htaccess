@@ -6,7 +6,7 @@
     RewriteEngine On
 
     # Set base path for subdirectory installation
-    RewriteBase /autosurvey/
+    RewriteBase /surveymate/
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
@@ -21,6 +21,11 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
+</IfModule>
+
+# Fallback for servers where RewriteRule doesn't work properly
+<IfModule mod_dir.c>
+    FallbackResource /surveymate/index.php
 </IfModule>
 
 # Security Headers
@@ -47,8 +52,8 @@
     ExpiresByType font/woff2 "access plus 1 month"
 </IfModule>
 
-# PHP settings
-<IfModule mod_php7.c>
+# PHP settings (PHP 8.x)
+<IfModule mod_php.c>
     php_value upload_max_filesize 10M
     php_value post_max_size 10M
     php_value max_execution_time 300

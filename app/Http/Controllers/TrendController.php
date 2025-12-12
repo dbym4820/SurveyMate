@@ -24,13 +24,16 @@ class TrendController extends Controller
      */
     public function papers(Request $request, string $period): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         $dateRange = $this->getDateRange($period);
 
         if (!$dateRange) {
             return response()->json(['error' => '無効な期間です'], 400);
         }
 
-        $papers = Paper::with('journal:id,name,full_name,color,category')
+        $papers = Paper::with('journal:id,name,color')
+            ->forUser($user->id)
             ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']])
             ->orderBy('published_date', 'desc')
             ->get()
@@ -43,7 +46,6 @@ class TrendController extends Controller
                     'published_date' => $paper->published_date ? $paper->published_date->format('Y-m-d') : null,
                     'journal_name' => $paper->journal ? $paper->journal->name : null,
                     'journal_color' => $paper->journal ? $paper->journal->color : 'bg-gray-500',
-                    'category' => $paper->journal ? $paper->journal->category : null,
                 ];
             });
 
@@ -64,13 +66,16 @@ class TrendController extends Controller
      */
     public function generate(Request $request, string $period): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         $dateRange = $this->getDateRange($period);
 
         if (!$dateRange) {
             return response()->json(['error' => '無効な期間です'], 400);
         }
 
-        $papers = Paper::with('journal:id,name,full_name,category')
+        $papers = Paper::with('journal:id,name')
+            ->forUser($user->id)
             ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']])
             ->orderBy('published_date', 'desc')
             ->get();
@@ -85,7 +90,6 @@ class TrendController extends Controller
         }
 
         // Set user context for API key resolution
-        $user = $request->attributes->get('user');
         if ($user) {
             $this->aiService->setUser($user);
         }
@@ -164,12 +168,16 @@ class TrendController extends Controller
      */
     public function stats(Request $request): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         $periods = ['day', 'week', 'month', 'halfyear'];
         $stats = [];
 
         foreach ($periods as $period) {
             $dateRange = $this->getDateRange($period);
-            $count = Paper::whereBetween('published_date', [$dateRange['from'], $dateRange['to']])->count();
+            $count = Paper::forUser($user->id)
+                ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']])
+                ->count();
 
             $stats[$period] = [
                 'count' => $count,
@@ -228,22 +236,21 @@ class TrendController extends Controller
 
         $periodLabel = $periodLabels[$period] ?? $period;
 
-        // Group papers by category
-        $byCategory = $papers->groupBy(function ($paper) {
-            return $paper->journal ? $paper->journal->category : 'その他';
+        // Group papers by journal
+        $byJournal = $papers->groupBy(function ($paper) {
+            return $paper->journal ? $paper->journal->name : 'その他';
         });
 
         // Prepare paper summaries for AI
         $paperSummaries = $papers->take(50)->map(function ($paper) {
             return [
                 'title' => $paper->title,
-                'category' => $paper->journal ? $paper->journal->category : null,
                 'journal' => $paper->journal ? $paper->journal->name : null,
                 'abstract' => $paper->abstract ? mb_substr($paper->abstract, 0, 500) : null,
             ];
         })->toArray();
 
-        $prompt = $this->buildTrendPrompt($periodLabel, $paperSummaries, $byCategory);
+        $prompt = $this->buildTrendPrompt($periodLabel, $paperSummaries, $byJournal);
 
         $result = $this->aiService->generateCustomSummary($prompt, $provider);
 
@@ -260,7 +267,7 @@ class TrendController extends Controller
             'overview' => $result['overview'] ?? null,
             'key_topics' => $result['keyTopics'] ?? null,
             'emerging_trends' => $result['emergingTrends'] ?? null,
-            'category_insights' => $result['categoryInsights'] ?? null,
+            'journal_insights' => $result['journalInsights'] ?? null,
             'recommendations' => $result['recommendations'] ?? null,
             'paper_count' => $papers->count(),
         ]);
@@ -271,10 +278,10 @@ class TrendController extends Controller
     /**
      * Build prompt for trend analysis
      */
-    private function buildTrendPrompt(string $periodLabel, array $papers, $byCategory): string
+    private function buildTrendPrompt(string $periodLabel, array $papers, $byJournal): string
     {
-        $categoryStats = $byCategory->map(function ($items, $category) {
-            return "{$category}: {$items->count()}件";
+        $journalStats = $byJournal->map(function ($items, $journal) {
+            return "{$journal}: {$items->count()}件";
         })->implode(', ');
 
         $paperList = collect($papers)->map(function ($paper, $index) {
@@ -284,12 +291,12 @@ class TrendController extends Controller
         })->implode("\n\n");
 
         return <<<PROMPT
-あなたは教育工学・AI教育・認知科学分野の専門家です。
-{$periodLabel}に収集された学術論文のトレンドを分析し、日本語で要約してください。
+あなたは教育工学・AI教育・認知科学分野の専門家です．
+{$periodLabel}に収集された学術論文のトレンドを分析し，日本語で要約してください．
 
 ## 論文統計
-- 総数: {$byCategory->flatten()->count()}件
-- カテゴリ別: {$categoryStats}
+- 総数: {$byJournal->flatten()->count()}件
+- 論文誌別: {$journalStats}
 
 ## 論文リスト
 {$paperList}
@@ -310,8 +317,8 @@ class TrendController extends Controller
     "新しく注目されているトレンド1",
     "新しく注目されているトレンド2"
   ],
-  "categoryInsights": {
-    "カテゴリ名": "そのカテゴリの傾向（50-100文字）"
+  "journalInsights": {
+    "論文誌名": "その論文誌の傾向（50-100文字）"
   },
   "recommendations": [
     "研究者へのおすすめ論文や方向性1",
@@ -319,7 +326,7 @@ class TrendController extends Controller
   ]
 }
 
-JSON形式のみを出力し、それ以外のテキストは含めないでください。
+JSON形式のみを出力し，それ以外のテキストは含めないでください．
 PROMPT;
     }
 

@@ -10,17 +10,24 @@ class JournalController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $journals = Journal::active()
-            ->withCount('papers')
-            ->orderBy('name')
+        $user = $request->attributes->get('user');
+        $showAll = $request->boolean('all', false);
+
+        $query = Journal::forUser($user->id)->withCount('papers');
+
+        if (!$showAll) {
+            $query->active();
+        }
+
+        $journals = $query->orderBy('name')
             ->get()
             ->map(function ($j) {
                 return [
                     'id' => $j->id,
                     'name' => $j->name,
                     'full_name' => $j->full_name,
-                    'publisher' => $j->publisher,
-                    'category' => $j->category,
+                    'display_name' => $j->display_name,
+                    'rss_url' => $j->rss_url,
                     'color' => $j->color,
                     'is_active' => $j->is_active,
                     'last_fetched_at' => $j->last_fetched_at ? $j->last_fetched_at->toISOString() : null,
@@ -36,10 +43,13 @@ class JournalController extends Controller
 
     public function show(Request $request, string $id): JsonResponse
     {
-        $journal = Journal::with(['papers' => function ($query) {
-            $query->orderBy('published_date', 'desc')
-                ->limit(10);
-        }])->find($id);
+        $user = $request->attributes->get('user');
+
+        $journal = Journal::forUser($user->id)
+            ->with(['papers' => function ($query) {
+                $query->orderBy('published_date', 'desc')
+                    ->limit(10);
+            }])->find($id);
 
         if (!$journal) {
             return response()->json(['error' => '論文誌が見つかりません'], 404);
@@ -49,9 +59,8 @@ class JournalController extends Controller
             'id' => $journal->id,
             'name' => $journal->name,
             'full_name' => $journal->full_name,
-            'publisher' => $journal->publisher,
+            'display_name' => $journal->display_name,
             'rss_url' => $journal->rss_url,
-            'category' => $journal->category,
             'color' => $journal->color,
             'is_active' => $journal->is_active,
             'last_fetched_at' => $journal->last_fetched_at ? $journal->last_fetched_at->toISOString() : null,

@@ -40,29 +40,30 @@ class AiSummaryService
         $hasClaudeKey = ($this->user && $this->user->hasClaudeApiKey()) || config('services.ai.claude_api_key');
         $hasOpenaiKey = ($this->user && $this->user->hasOpenaiApiKey()) || config('services.ai.openai_api_key');
 
-        if ($hasClaudeKey) {
-            $providers[] = [
-                'id' => 'claude',
-                'name' => 'Claude',
-                'models' => [
-                    config('services.ai.claude_model', 'claude-sonnet-4-20250514'),
-                ],
-                'default_model' => config('services.ai.claude_model', 'claude-sonnet-4-20250514'),
-                'user_key' => $this->user && $this->user->hasClaudeApiKey(),
-            ];
-        }
-
+        // OpenAI first (default provider)
         if ($hasOpenaiKey) {
+            $openaiModels = $this->parseModelList(
+                config('services.ai.openai_available_models', 'gpt-4o,gpt-4o-mini,gpt-4-turbo,gpt-3.5-turbo')
+            );
             $providers[] = [
                 'id' => 'openai',
                 'name' => 'OpenAI',
-                'models' => [
-                    config('services.ai.openai_model', 'gpt-4o'),
-                    'gpt-4-turbo',
-                    'gpt-3.5-turbo',
-                ],
-                'default_model' => config('services.ai.openai_model', 'gpt-4o'),
+                'models' => $openaiModels,
+                'default_model' => config('services.ai.openai_default_model', 'gpt-4o'),
                 'user_key' => $this->user && $this->user->hasOpenaiApiKey(),
+            ];
+        }
+
+        if ($hasClaudeKey) {
+            $claudeModels = $this->parseModelList(
+                config('services.ai.claude_available_models', 'claude-sonnet-4-20250514,claude-opus-4-20250514,claude-3-5-haiku-20241022')
+            );
+            $providers[] = [
+                'id' => 'claude',
+                'name' => 'Claude',
+                'models' => $claudeModels,
+                'default_model' => config('services.ai.claude_default_model', 'claude-sonnet-4-20250514'),
+                'user_key' => $this->user && $this->user->hasClaudeApiKey(),
             ];
         }
 
@@ -77,18 +78,18 @@ class AiSummaryService
      * @param string|null $model
      * @return array
      */
-    public function generateSummary(Paper $paper, string $provider = 'claude', ?string $model = null): array
+    public function generateSummary(Paper $paper, string $provider = 'openai', ?string $model = null): array
     {
         $startTime = microtime(true);
 
         $prompt = $this->buildPrompt($paper);
 
         switch ($provider) {
-            case 'openai':
-                $result = $this->callOpenAI($prompt, $model);
+            case 'claude':
+                $result = $this->callClaude($prompt, $model);
                 break;
             default:
-                $result = $this->callClaude($prompt, $model);
+                $result = $this->callOpenAI($prompt, $model);
                 break;
         }
 
@@ -101,10 +102,10 @@ class AiSummaryService
     private function buildPrompt(Paper $paper): string
     {
         $authors = is_array($paper->authors) ? implode(', ', $paper->authors) : ($paper->authors ?? '不明');
-        $journalName = ($paper->journal && $paper->journal->full_name) ? $paper->journal->full_name : '不明';
+        $journalName = ($paper->journal && $paper->journal->name) ? $paper->journal->name : '不明';
 
         return <<<PROMPT
-以下の学術論文について、日本語で構造化された要約を作成してください。
+以下の学術論文について，日本語で構造化された要約を作成してください．
 
 【論文情報】
 タイトル: {$paper->title}
@@ -123,7 +124,7 @@ class AiSummaryService
   "implications": "教育への示唆・実践的意義（1文）"
 }
 
-重要: JSON形式のみで回答し、他のテキストは含めないでください。
+重要: JSON形式のみで回答し，他のテキストは含めないでください．
 PROMPT;
     }
 
@@ -141,7 +142,7 @@ PROMPT;
             throw new \Exception('Claude API key is not configured. Please set your API key in Settings.');
         }
 
-        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-20250514');
+        $model = $model ?? config('services.ai.claude_default_model', 'claude-sonnet-4-20250514');
 
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
@@ -195,7 +196,7 @@ PROMPT;
             throw new \Exception('OpenAI API key is not configured. Please set your API key in Settings.');
         }
 
-        $model = $model ?? config('services.ai.openai_model', 'gpt-4o');
+        $model = $model ?? config('services.ai.openai_default_model', 'gpt-4o');
 
         // Build request body
         $requestBody = [
@@ -255,14 +256,14 @@ PROMPT;
      */
     public function generateCustomSummary(string $prompt, ?string $provider = null, ?string $model = null): array
     {
-        $provider = $provider ?? config('services.ai.provider', 'claude');
+        $provider = $provider ?? config('services.ai.provider', 'openai');
 
         switch ($provider) {
-            case 'openai':
-                $result = $this->callOpenAICustom($prompt, $model);
+            case 'claude':
+                $result = $this->callClaudeCustom($prompt, $model);
                 break;
             default:
-                $result = $this->callClaudeCustom($prompt, $model);
+                $result = $this->callOpenAICustom($prompt, $model);
                 break;
         }
 
@@ -282,7 +283,7 @@ PROMPT;
             throw new \Exception('Claude API key is not configured.');
         }
 
-        $model = $model ?? config('services.ai.claude_model', 'claude-sonnet-4-20250514');
+        $model = $model ?? config('services.ai.claude_default_model', 'claude-sonnet-4-20250514');
 
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
@@ -319,7 +320,7 @@ PROMPT;
             throw new \Exception('OpenAI API key is not configured.');
         }
 
-        $model = $model ?? config('services.ai.openai_model', 'gpt-4o');
+        $model = $model ?? config('services.ai.openai_default_model', 'gpt-4o');
 
         // Build request body
         $requestBody = [
@@ -355,6 +356,17 @@ PROMPT;
         $content = $data['choices'][0]['message']['content'] ?? '';
 
         return $this->parseJsonResponse($content);
+    }
+
+    /**
+     * Parse comma-separated model list from config
+     *
+     * @param string $modelList
+     * @return array
+     */
+    private function parseModelList(string $modelList): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $modelList))));
     }
 
     private function parseJsonResponse(string $content): array

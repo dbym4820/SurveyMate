@@ -53,6 +53,32 @@ class RssFetcherService
         return $results;
     }
 
+    public function fetchForUser(int $userId): array
+    {
+        if ($this->isRunning) {
+            return ['error' => 'Already running'];
+        }
+
+        $this->isRunning = true;
+        $this->lastRunTime = new \DateTime();
+
+        $journals = Journal::active()->forUser($userId)->get();
+        $results = [];
+
+        foreach ($journals as $journal) {
+            $result = $this->fetchJournal($journal);
+            $results[$journal->id] = $result;
+
+            // Minimum interval between fetches
+            $interval = config('services.fetch.min_interval', 5000);
+            usleep($interval * 1000);
+        }
+
+        $this->isRunning = false;
+
+        return $results;
+    }
+
     public function fetchJournal(Journal $journal): array
     {
         $startTime = microtime(true);

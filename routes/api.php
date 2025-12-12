@@ -9,6 +9,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TrendController;
 use App\Http\Controllers\PushController;
+use App\Http\Controllers\TagController;
 use App\Http\Middleware\SessionAuth;
 use App\Http\Middleware\AdminOnly;
 
@@ -18,7 +19,7 @@ use App\Http\Middleware\AdminOnly;
 |--------------------------------------------------------------------------
 |
 | All routes are prefixed with /api automatically by Laravel.
-| For the /autosurvey prefix, configure it in RouteServiceProvider or .htaccess.
+| For the /surveymate prefix, configure it in RouteServiceProvider or .htaccess.
 |
 */
 
@@ -28,22 +29,22 @@ Route::get('/health', function () {
         'status' => 'ok',
         'timestamp' => now()->toISOString(),
         'app' => [
-            'name' => config('autosurvey.name'),
-            'version' => config('autosurvey.version'),
-            'developer' => config('autosurvey.developer'),
+            'name' => config('surveymate.name'),
+            'version' => config('surveymate.version'),
+            'developer' => config('surveymate.developer'),
         ],
     ]);
 });
 
-// Auth routes (no authentication required for login/register)
+// Auth routes (no authentication required for login/register/me)
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::get('/me', [AuthController::class, 'me']);
 
     // Requires authentication
     Route::middleware(SessionAuth::class)->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
-        Route::get('/me', [AuthController::class, 'me']);
     });
 });
 
@@ -64,6 +65,19 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::get('/papers', [PaperController::class, 'index']);
     Route::get('/papers/stats', [PaperController::class, 'stats']);
     Route::get('/papers/{id}', [PaperController::class, 'show']);
+
+    // Tags
+    Route::prefix('tags')->group(function () {
+        Route::get('/', [TagController::class, 'index']);
+        Route::post('/', [TagController::class, 'store']);
+        Route::put('/{id}', [TagController::class, 'update']);
+        Route::delete('/{id}', [TagController::class, 'destroy']);
+        Route::get('/{id}/papers', [TagController::class, 'papersByTag']);
+    });
+
+    // Paper tags
+    Route::post('/papers/{paperId}/tags', [TagController::class, 'addTagToPaper']);
+    Route::delete('/papers/{paperId}/tags/{tagId}', [TagController::class, 'removeTagFromPaper']);
 
     // Journals
     Route::get('/journals', [JournalController::class, 'index']);

@@ -41,11 +41,17 @@ return [
     |--------------------------------------------------------------------------
     */
     'ai' => [
-        'provider' => env('AI_PROVIDER', 'claude'),
-        'claude_api_key' => env('CLAUDE_API_KEY'),
-        'claude_model' => env('CLAUDE_MODEL', 'claude-sonnet-4-20250514'),
+        'provider' => env('AI_PROVIDER', 'openai'),
+
+        // OpenAI
         'openai_api_key' => env('OPENAI_API_KEY'),
-        'openai_model' => env('OPENAI_MODEL', 'gpt-4o'),
+        'openai_default_model' => env('OPENAI_DEFAULT_MODEL', 'gpt-4o'),
+        'openai_available_models' => env('OPENAI_AVAILABLE_MODELS', 'gpt-4o,gpt-4o-mini,gpt-4-turbo,gpt-3.5-turbo'),
+
+        // Claude (Anthropic)
+        'claude_api_key' => env('CLAUDE_API_KEY'),
+        'claude_default_model' => env('CLAUDE_DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
+        'claude_available_models' => env('CLAUDE_AVAILABLE_MODELS', 'claude-sonnet-4-20250514,claude-opus-4-20250514,claude-3-5-haiku-20241022'),
     ],
 
     /*

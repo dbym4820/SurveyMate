@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
-  Settings, Plus, Database, ChevronLeft, RefreshCw, Edit, Trash2,
-  ToggleRight, Loader2, Globe, FileText, Clock, Rss
+  Plus, RefreshCw, Edit, Trash2,
+  ToggleRight, Loader2, FileText, Clock, Rss
 } from 'lucide-react';
 import api from '../api';
 import JournalModal from './JournalModal';
 import { RSS_URL_EXAMPLES } from '../constants';
 import type { Journal } from '../types';
 
-interface JournalManagementProps {
-  onBack: () => void;
-}
-
-export default function JournalManagement({ onBack }: JournalManagementProps): JSX.Element {
+export default function JournalManagement(): JSX.Element {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -73,8 +69,8 @@ export default function JournalManagement({ onBack }: JournalManagementProps): J
     setFetchingJournal(journal.id);
     try {
       const data = await api.journals.fetch(journal.id);
-      if (data.success) {
-        alert(`${journal.name}: ${data.result.newPapers || 0}件の新規論文を取得しました`);
+      if (data.result.status === 'success') {
+        alert(`${journal.name}: ${data.result.new_papers || 0}件の新規論文を取得しました`);
         fetchJournals();
       } else {
         alert('取得に失敗しました: ' + (data.result.error || ''));
@@ -87,47 +83,29 @@ export default function JournalManagement({ onBack }: JournalManagementProps): J
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onBack}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Settings className="w-6 h-6 text-indigo-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">論文誌管理</h1>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setEditingJournal(null);
-                setShowModal(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              新しい論文誌を追加
-            </button>
-          </div>
+    <main className="max-w-6xl mx-auto px-4 py-6">
+      {/* アクションバー */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <FileText className="w-4 h-4" />
+          {journals.length}件の論文誌
         </div>
-      </header>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              setEditingJournal(null);
+              setShowModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            新しい論文誌を追加
+          </button>
+        </div>
+      </div>
 
-      {/* メインコンテンツ */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        {/* フィルター */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Database className="w-4 h-4" />
-            {journals.length}件の論文誌
-          </div>
+      {/* フィルター */}
+      <div className="mb-4 flex items-center justify-end">
           <label className="flex items-center gap-2 cursor-pointer">
             <span className="text-sm text-gray-600">無効な論文誌も表示</span>
             <button
@@ -167,21 +145,13 @@ export default function JournalManagement({ onBack }: JournalManagementProps): J
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{journal.name}</h3>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600">
-                        {journal.category}
-                      </span>
                       {(journal.is_active === 0 || journal.is_active === false) && (
                         <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
                           無効
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 mb-1">{journal.full_name}</p>
                     <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Globe className="w-3 h-3" />
-                        {journal.publisher}
-                      </span>
                       <span className="flex items-center gap-1">
                         <FileText className="w-3 h-3" />
                         {journal.paper_count || 0}件
@@ -261,19 +231,18 @@ export default function JournalManagement({ onBack }: JournalManagementProps): J
             ))}
           </div>
         </div>
-      </main>
 
-      {/* モーダル */}
-      {showModal && (
-        <JournalModal
-          journal={editingJournal}
-          onSave={handleSave}
-          onClose={() => {
-            setShowModal(false);
-            setEditingJournal(null);
-          }}
-        />
-      )}
-    </div>
+        {/* モーダル */}
+        {showModal && (
+          <JournalModal
+            journal={editingJournal}
+            onSave={handleSave}
+            onClose={() => {
+              setShowModal(false);
+              setEditingJournal(null);
+            }}
+          />
+        )}
+      </main>
   );
 }

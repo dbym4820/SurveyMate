@@ -10,15 +10,21 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('username', 100)->unique()->comment('ユーザー名');
+            $table->string('user_id', 50)->unique()->comment('ログイン用ID');
+            $table->string('username', 100)->comment('表示名');
             $table->string('password_hash', 255)->comment('パスワードハッシュ');
             $table->string('email', 255)->nullable()->comment('メールアドレス');
             $table->boolean('is_admin')->default(false)->comment('管理者フラグ');
             $table->boolean('is_active')->default(true)->comment('有効フラグ');
+            $table->text('claude_api_key')->nullable()->comment('Claude APIキー（暗号化）');
+            $table->text('openai_api_key')->nullable()->comment('OpenAI APIキー（暗号化）');
+            $table->string('preferred_ai_provider', 20)->default('openai')->comment('優先AIプロバイダ');
+            $table->string('preferred_openai_model')->nullable()->comment('優先OpenAIモデル');
+            $table->string('preferred_claude_model')->nullable()->comment('優先Claudeモデル');
             $table->dateTime('last_login_at')->nullable()->comment('最終ログイン日時');
             $table->timestamps();
 
-            $table->index('username');
+            $table->index('user_id');
             $table->index('is_active');
         });
     }

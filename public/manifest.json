@@ -1,6 +1,6 @@
 {
-  "name": "AutoSurvey",
-  "short_name": "AutoSurvey",
+  "name": "SurveyMate",
+  "short_name": "SurveyMate",
   "description": "学術論文RSS集約・AI要約システム",
   "start_url": "./",
   "scope": "./",

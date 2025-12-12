@@ -31,16 +31,27 @@ class AdminController extends Controller
 
     public function schedulerRun(Request $request): JsonResponse
     {
+        $user = $request->attributes->get('user');
         $journalId = $request->journalId;
 
         if ($journalId) {
-            $journal = Journal::find($journalId);
+            // 管理者は全ジャーナル，一般ユーザーは自分のジャーナルのみ
+            if ($user->is_admin) {
+                $journal = Journal::find($journalId);
+            } else {
+                $journal = Journal::forUser($user->id)->find($journalId);
+            }
             if (!$journal) {
                 return response()->json(['error' => '論文誌が見つかりません'], 404);
             }
             $result = $this->rssFetcher->fetchJournal($journal);
         } else {
-            $result = $this->rssFetcher->fetchAll();
+            // 管理者は全ジャーナル，一般ユーザーは自分のジャーナルのみ
+            if ($user->is_admin) {
+                $result = $this->rssFetcher->fetchAll();
+            } else {
+                $result = $this->rssFetcher->fetchForUser($user->id);
+            }
         }
 
         return response()->json([
@@ -88,22 +99,19 @@ class AdminController extends Controller
 
     public function createJournal(Request $request): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         // Convert camelCase to snake_case for compatibility
         $data = $request->all();
-        if (isset($data['fullName']) && !isset($data['full_name'])) {
-            $data['full_name'] = $data['fullName'];
-        }
         if (isset($data['rssUrl']) && !isset($data['rss_url'])) {
             $data['rss_url'] = $data['rssUrl'];
         }
 
         $validator = Validator::make($data, [
-            'id' => 'required|string|max:50|unique:journals',
-            'name' => 'required|string|max:100',
-            'full_name' => 'required|string|max:255',
-            'publisher' => 'required|string|max:100',
+            'id' => 'required|string|max:50',
+            'name' => 'required|string|max:255',
+            'full_name' => 'nullable|string|max:500',
             'rss_url' => 'required|url|max:500',
-            'category' => 'nullable|string|max:100',
             'color' => 'nullable|string|max:50',
         ]);
 
@@ -111,18 +119,33 @@ class AdminController extends Controller
             return response()->json(['error' => $validator->errors()->first()], 400);
         }
 
-        $journal = Journal::create($validator->validated());
+        // IDの重複チェック（ユーザーごと）
+        $existingJournal = Journal::forUser($user->id)->where('id', $data['id'])->first();
+        if ($existingJournal) {
+            return response()->json(['error' => 'この論文誌IDは既に使用されています'], 400);
+        }
+
+        $journalData = $validator->validated();
+        $journalData['user_id'] = $user->id;
+
+        $journal = Journal::create($journalData);
+
+        // 初回RSSフェッチを実行
+        $fetchResult = $this->rssFetcher->fetchJournal($journal);
 
         return response()->json([
             'success' => true,
             'message' => '論文誌を追加しました',
             'journal' => $journal,
+            'fetch_result' => $fetchResult,
         ], 201);
     }
 
     public function updateJournal(Request $request, string $id): JsonResponse
     {
-        $journal = Journal::find($id);
+        $user = $request->attributes->get('user');
+
+        $journal = Journal::forUser($user->id)->find($id);
 
         if (!$journal) {
             return response()->json(['error' => '論文誌が見つかりません'], 404);
@@ -130,19 +153,14 @@ class AdminController extends Controller
 
         // Convert camelCase to snake_case for compatibility
         $data = $request->all();
-        if (isset($data['fullName']) && !isset($data['full_name'])) {
-            $data['full_name'] = $data['fullName'];
-        }
         if (isset($data['rssUrl']) && !isset($data['rss_url'])) {
             $data['rss_url'] = $data['rssUrl'];
         }
 
         $validator = Validator::make($data, [
-            'name' => 'nullable|string|max:100',
-            'full_name' => 'nullable|string|max:255',
-            'publisher' => 'nullable|string|max:100',
+            'name' => 'nullable|string|max:255',
+            'full_name' => 'nullable|string|max:500',
             'rss_url' => 'nullable|url|max:500',
-            'category' => 'nullable|string|max:100',
             'color' => 'nullable|string|max:50',
             'is_active' => 'nullable|boolean',
         ]);
@@ -164,7 +182,9 @@ class AdminController extends Controller
 
     public function deleteJournal(Request $request, string $id): JsonResponse
     {
-        $journal = Journal::find($id);
+        $user = $request->attributes->get('user');
+
+        $journal = Journal::forUser($user->id)->find($id);
 
         if (!$journal) {
             return response()->json(['error' => '論文誌が見つかりません'], 404);
@@ -181,7 +201,9 @@ class AdminController extends Controller
 
     public function activateJournal(Request $request, string $id): JsonResponse
     {
-        $journal = Journal::find($id);
+        $user = $request->attributes->get('user');
+
+        $journal = Journal::forUser($user->id)->find($id);
 
         if (!$journal) {
             return response()->json(['error' => '論文誌が見つかりません'], 404);
@@ -230,7 +252,9 @@ class AdminController extends Controller
 
     public function fetchJournal(Request $request, string $id): JsonResponse
     {
-        $journal = Journal::find($id);
+        $user = $request->attributes->get('user');
+
+        $journal = Journal::forUser($user->id)->find($id);
 
         if (!$journal) {
             return response()->json(['error' => '論文誌が見つかりません'], 404);

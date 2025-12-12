@@ -11,6 +11,7 @@ type FormMode = 'login' | 'register';
 
 export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   const [mode, setMode] = useState<FormMode>('login');
+  const [userId, setUserId] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -20,6 +21,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   const [loading, setLoading] = useState(false);
 
   const resetForm = (): void => {
+    setUserId('');
     setUsername('');
     setPassword('');
     setConfirmPassword('');
@@ -34,11 +36,14 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   };
 
   const validateRegistration = (): string | null => {
-    if (username.length < 3 || username.length > 50) {
-      return 'ユーザー名は3〜50文字で入力してください';
+    if (userId.length < 3 || userId.length > 50) {
+      return 'ユーザーIDは3〜50文字で入力してください';
     }
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-      return 'ユーザー名は英数字、アンダースコア、ハイフンのみ使用できます';
+    if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
+      return 'ユーザーIDは英数字，アンダースコア，ハイフンのみ使用できます';
+    }
+    if (!username.trim()) {
+      return '表示名を入力してください';
     }
     if (password.length < 8) {
       return 'パスワードは8文字以上で入力してください';
@@ -53,7 +58,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   };
 
   const handleLogin = async (): Promise<void> => {
-    const data = await api.auth.login(username, password);
+    const data = await api.auth.login(userId, password);
     onLogin(data.user);
   };
 
@@ -64,13 +69,13 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
       return;
     }
 
-    const data = await api.auth.register(username, password, email || undefined);
-    // 登録成功時、自動ログインされていればonLoginを呼ぶ
+    const data = await api.auth.register(userId, username, password, email || undefined);
+    // 登録成功時，expiresAtがあれば自動ログイン完了
     if (data.expiresAt) {
       onLogin(data.user);
     } else {
       // 自動ログインされなかった場合はログインフォームに戻す
-      setSuccess('登録が完了しました。ログインしてください。');
+      setSuccess('登録が完了しました．ログインしてください．');
       setMode('login');
       setPassword('');
       setConfirmPassword('');
@@ -94,12 +99,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
       if (mode === 'login') {
         setError(message || 'ログインに失敗しました');
       } else {
-        // エラーメッセージを日本語化
-        if (message === 'Username already exists') {
-          setError('このユーザー名は既に使用されています');
-        } else {
-          setError(message || '登録に失敗しました');
-        }
+        setError(message || '登録に失敗しました');
       }
     } finally {
       setLoading(false);
@@ -114,7 +114,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">AutoSurvey</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">SurveyMate</h1>
           </div>
         </div>
 
@@ -159,21 +159,45 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             </div>
           )}
 
+          {/* ユーザーID（ログイン用） */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              ユーザー名
+              ユーザーID
             </label>
             <input
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-              placeholder={mode === 'register' ? '3〜50文字の英数字' : 'ユーザー名を入力'}
+              placeholder={mode === 'register' ? '3〜50文字の英数字（ログイン時に使用）' : 'ユーザーIDを入力'}
               required
               autoComplete="username"
             />
+            {mode === 'register' && (
+              <p className="text-xs text-gray-500 mt-1">英数字，アンダースコア，ハイフンのみ．変更不可．</p>
+            )}
           </div>
 
+          {/* 表示名（登録時のみ） */}
+          {mode === 'register' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                表示名
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                placeholder="画面に表示される名前"
+                required
+                autoComplete="name"
+              />
+              <p className="text-xs text-gray-500 mt-1">他のユーザーと同じ名前でもOK．後から変更可能．</p>
+            </div>
+          )}
+
+          {/* メールアドレス（登録時のみ） */}
           {mode === 'register' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -190,6 +214,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             </div>
           )}
 
+          {/* パスワード */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               パスワード
@@ -205,6 +230,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             />
           </div>
 
+          {/* パスワード確認（登録時のみ） */}
           {mode === 'register' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -241,7 +267,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
         <p className="mt-6 text-center text-xs text-gray-500">
           {mode === 'login'
             ? 'アカウントをお持ちでない場合は「新規登録」タブから登録できます'
-            : '登録完了後、自動的にログインします'}
+            : '登録完了後，自動的にログインします'}
         </p>
       </div>
     </div>

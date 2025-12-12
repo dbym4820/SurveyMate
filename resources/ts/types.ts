@@ -4,7 +4,8 @@
 
 export interface User {
   id: number;
-  username: string;
+  userId: string;      // ログイン用ID
+  username: string;    // 表示名
   email?: string | null;
   isAdmin: boolean;
 }
@@ -12,13 +13,20 @@ export interface User {
 export interface Journal {
   id: string;
   name: string;
-  full_name: string;
-  publisher: string;
+  full_name?: string | null;
+  display_name?: string;
   rss_url: string;
-  category: string;
   color: string;
   is_active: number | boolean;
   last_fetched_at: string | null;
+  paper_count?: number;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  description?: string | null;
   paper_count?: number;
 }
 
@@ -33,11 +41,10 @@ export interface Paper {
   published_date: string | null;
   fetched_at: string;
   journal_name: string;
-  journal_full_name: string;
   journal_color: string;
-  category: string;
   has_summary?: number;
   summaries?: Summary[];
+  tags?: Tag[];
 }
 
 export interface Summary {
@@ -59,7 +66,8 @@ export interface AIProvider {
   id: string;
   name: string;
   models: string[];
-  defaultModel: string;
+  default_model: string;
+  user_key?: boolean;
 }
 
 export interface Pagination {
@@ -70,9 +78,10 @@ export interface Pagination {
 }
 
 export interface FetchResult {
-  success: boolean;
-  papersFetched?: number;
-  newPapers?: number;
+  status: 'success' | 'error';
+  papers_fetched?: number;
+  new_papers?: number;
+  execution_time_ms?: number;
   error?: string;
 }
 
@@ -156,10 +165,8 @@ export interface GenerateSummaryResponse {
 export interface JournalFormData {
   id: string;
   name: string;
-  fullName: string;
-  publisher: string;
+  full_name?: string;
   rssUrl: string;
-  category: string;
   color: string;
 }
 
@@ -170,7 +177,9 @@ export interface ApiSettings {
   openai_api_key_set: boolean;
   openai_api_key_masked: string | null;
   preferred_ai_provider: string;
-  available_providers: string[];
+  preferred_openai_model: string | null;
+  preferred_claude_model: string | null;
+  available_providers: AIProvider[];
 }
 
 export interface ApiSettingsResponse {
@@ -180,5 +189,25 @@ export interface ApiSettingsResponse {
   claude_api_key_set: boolean;
   openai_api_key_set: boolean;
   preferred_ai_provider: string;
-  available_providers: string[];
+  preferred_openai_model: string | null;
+  preferred_claude_model: string | null;
+  available_providers: AIProvider[];
+}
+
+// Tag API Response types
+export interface TagsResponse {
+  success: boolean;
+  tags: Tag[];
+}
+
+export interface TagResponse {
+  success: boolean;
+  tag: Tag;
+  message?: string;
+}
+
+export interface TagPapersResponse {
+  success: boolean;
+  tag: Tag;
+  papers: Paper[];
 }

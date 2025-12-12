@@ -29,7 +29,7 @@ class SummaryController extends Controller
         $providers = $this->aiService->getAvailableProviders();
         $current = $user && $user->preferred_ai_provider
             ? $user->preferred_ai_provider
-            : config('services.ai.provider', 'claude');
+            : config('services.ai.provider', 'openai');
 
         return response()->json([
             'success' => true,
@@ -40,6 +40,8 @@ class SummaryController extends Controller
 
     public function generate(Request $request): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         $validator = Validator::make($request->all(), [
             'paperId' => 'required|integer|exists:papers,id',
             'provider' => 'nullable|string|in:claude,openai',
@@ -50,7 +52,7 @@ class SummaryController extends Controller
             return response()->json(['error' => $validator->errors()->first()], 400);
         }
 
-        $paper = Paper::with('journal')->find($request->paperId);
+        $paper = Paper::with('journal')->forUser($user->id)->find($request->paperId);
 
         if (!$paper) {
             return response()->json(['error' => '論文が見つかりません'], 404);
@@ -58,7 +60,6 @@ class SummaryController extends Controller
 
         try {
             // Set user context for API key resolution
-            $user = $request->attributes->get('user');
             if ($user) {
                 $this->aiService->setUser($user);
             }
@@ -69,9 +70,18 @@ class SummaryController extends Controller
                 $provider = $user->preferred_ai_provider;
             }
             if (!$provider) {
-                $provider = config('services.ai.provider', 'claude');
+                $provider = config('services.ai.provider', 'openai');
             }
+
+            // Determine model: request > user preference
             $model = $request->model;
+            if (!$model && $user) {
+                if ($provider === 'openai' && $user->preferred_openai_model) {
+                    $model = $user->preferred_openai_model;
+                } elseif ($provider === 'claude' && $user->preferred_claude_model) {
+                    $model = $user->preferred_claude_model;
+                }
+            }
 
             $result = $this->aiService->generateSummary($paper, $provider, $model);
 
@@ -114,6 +124,14 @@ class SummaryController extends Controller
 
     public function byPaper(Request $request, int $paperId): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
+        // ユーザーの論文かどうかを確認
+        $paper = Paper::forUser($user->id)->find($paperId);
+        if (!$paper) {
+            return response()->json(['error' => '論文が見つかりません'], 404);
+        }
+
         $summaries = Summary::where('paper_id', $paperId)
             ->orderBy('created_at', 'desc')
             ->get()

@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Crypt;
 class User extends Model
 {
     protected $fillable = [
-        'username',
+        'user_id',      // ログイン用ID（ユニーク）
+        'username',     // 表示名（重複可）
         'password',
         'password_hash',
         'email',
@@ -21,6 +22,8 @@ class User extends Model
         'claude_api_key',
         'openai_api_key',
         'preferred_ai_provider',
+        'preferred_openai_model',
+        'preferred_claude_model',
     ];
 
     protected $hidden = [
@@ -43,6 +46,11 @@ class User extends Model
     public function preferences(): HasOne
     {
         return $this->hasOne(UserPreference::class);
+    }
+
+    public function journals(): HasMany
+    {
+        return $this->hasMany(Journal::class);
     }
 
     public function setPasswordAttribute(string $password): void

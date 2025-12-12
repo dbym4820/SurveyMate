@@ -15,7 +15,7 @@ class TrendSummary extends Model
         'overview',
         'key_topics',
         'emerging_trends',
-        'category_insights',
+        'journal_insights',
         'recommendations',
         'paper_count',
     ];
@@ -25,7 +25,7 @@ class TrendSummary extends Model
         'date_to' => 'date',
         'key_topics' => 'array',
         'emerging_trends' => 'array',
-        'category_insights' => 'array',
+        'journal_insights' => 'array',
         'recommendations' => 'array',
     ];
 
@@ -65,7 +65,7 @@ class TrendSummary extends Model
                 'overview' => $data['overview'] ?? null,
                 'key_topics' => $data['key_topics'] ?? null,
                 'emerging_trends' => $data['emerging_trends'] ?? null,
-                'category_insights' => $data['category_insights'] ?? null,
+                'journal_insights' => $data['journal_insights'] ?? null,
                 'recommendations' => $data['recommendations'] ?? null,
                 'paper_count' => $data['paper_count'] ?? 0,
             ]
@@ -83,7 +83,7 @@ class TrendSummary extends Model
             'overview' => $this->overview,
             'keyTopics' => $this->key_topics ?? [],
             'emergingTrends' => $this->emerging_trends ?? [],
-            'categoryInsights' => $this->category_insights ?? [],
+            'journalInsights' => $this->journal_insights ?? [],
             'recommendations' => $this->recommendations ?? [],
         ];
     }

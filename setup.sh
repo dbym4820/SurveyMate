@@ -1,14 +1,13 @@
 #!/bin/bash
 
 #######################################
-# AutoSurvey Setup Script
+# SurveyMate Setup Script
 #
 # This script sets up the entire application:
 # - PHP/Composer dependencies
 # - Node.js/npm dependencies
 # - Environment configuration
 # - Database creation and migrations
-# - Database seeding
 # - Frontend build (Vite/TypeScript)
 # - Laravel optimization
 #######################################
@@ -57,7 +56,7 @@ else
 fi
 
 echo "======================================"
-echo "  AutoSurvey Setup Script"
+echo "  SurveyMate Setup Script"
 echo "======================================"
 echo ""
 
@@ -185,61 +184,129 @@ DB_PORT=$(grep "^DB_PORT=" .env | cut -d '=' -f2)
 DB_DATABASE=$(grep "^DB_DATABASE=" .env | cut -d '=' -f2)
 DB_USERNAME=$(grep "^DB_USERNAME=" .env | cut -d '=' -f2)
 DB_PASSWORD=$(grep "^DB_PASSWORD=" .env | cut -d '=' -f2)
+DB_SOCKET=$(grep "^DB_SOCKET=" .env | cut -d '=' -f2)
+MYSQL_BIN_ENV=$(grep "^MYSQL_BIN=" .env | cut -d '=' -f2)
 
 # Default values
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
-DB_DATABASE="${DB_DATABASE:-autosurvey}"
+DB_DATABASE="${DB_DATABASE:-surveymate}"
 
 echo "  Database: $DB_DATABASE"
-echo "  Host: $DB_HOST:$DB_PORT"
+if [ -n "$DB_SOCKET" ]; then
+    echo "  Socket: $DB_SOCKET"
+else
+    echo "  Host: $DB_HOST:$DB_PORT"
+fi
 
 # Check if MySQL and create database if needed
-if [ "$DB_CONNECTION" = "mysql" ] && command -v mysql > /dev/null 2>&1; then
-    echo "  Checking if database exists..."
-
-    # Build MySQL command
-    MYSQL_CMD="mysql -h $DB_HOST -P $DB_PORT -u $DB_USERNAME"
-    if [ -n "$DB_PASSWORD" ]; then
-        MYSQL_CMD="$MYSQL_CMD -p$DB_PASSWORD"
+if [ "$DB_CONNECTION" = "mysql" ]; then
+    # Find MySQL binary - use MYSQL_BIN from .env if specified
+    MYSQL_BIN=""
+    if [ -n "$MYSQL_BIN_ENV" ]; then
+        if [ -x "$MYSQL_BIN_ENV" ]; then
+            MYSQL_BIN="$MYSQL_BIN_ENV"
+            echo "  Using MySQL client from .env: $MYSQL_BIN"
+        else
+            echo "  Warning: MYSQL_BIN=$MYSQL_BIN_ENV not found or not executable"
+        fi
+    fi
+    # Fallback to system mysql
+    if [ -z "$MYSQL_BIN" ]; then
+        if command -v mysql > /dev/null 2>&1; then
+            MYSQL_BIN="mysql"
+            echo "  Using system MySQL client"
+        fi
     fi
 
-    # Check if database exists
-    DB_EXISTS=$($MYSQL_CMD -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$DB_DATABASE'" 2>/dev/null | grep -c "$DB_DATABASE" || echo "0")
-
-    if [ "$DB_EXISTS" = "0" ]; then
-        echo "  Creating database '$DB_DATABASE'..."
-        $MYSQL_CMD -e "CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
-        if [ $? -eq 0 ]; then
-            echo "  Database created: OK"
+    if [ -n "$MYSQL_BIN" ]; then
+        # Build MySQL command
+        if [ -n "$DB_SOCKET" ]; then
+            MYSQL_CMD="$MYSQL_BIN -S $DB_SOCKET -u $DB_USERNAME"
         else
-            echo "  Failed to create database. Please create it manually."
+            MYSQL_CMD="$MYSQL_BIN -h $DB_HOST -P $DB_PORT -u $DB_USERNAME"
+        fi
+        if [ -n "$DB_PASSWORD" ]; then
+            MYSQL_CMD="$MYSQL_CMD -p$DB_PASSWORD"
+        fi
+
+        # Check if database exists (use -N to skip column headers)
+        DB_EXISTS=$($MYSQL_CMD -N -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$DB_DATABASE'" 2>/dev/null || echo "")
+
+        if [ -n "$DB_EXISTS" ]; then
+            echo ""
+            echo -e "  ${YELLOW}Warning: Database '$DB_DATABASE' already exists.${NC}"
+            echo -e "  ${RED}All existing data will be deleted!${NC}"
+            echo ""
+            read -p "  Do you want to DROP and recreate the database? [y/N]: " CONFIRM
+            echo ""
+
+            if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+                echo "  Dropping existing database '$DB_DATABASE'..."
+                $MYSQL_CMD -e "DROP DATABASE \`$DB_DATABASE\`;" 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    echo "  Database dropped: OK"
+                else
+                    echo "  Failed to drop database."
+                    exit 1
+                fi
+                DB_EXISTS=""
+            else
+                echo "  Keeping existing database."
+            fi
+        fi
+
+        if [ -z "$DB_EXISTS" ]; then
+            echo "  Creating database '$DB_DATABASE'..."
+            $MYSQL_CMD -e "CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo "  Database created: OK"
+            else
+                echo "  Failed to create database. Please create it manually."
+            fi
         fi
     else
-        echo "  Database already exists: OK"
+        echo "  Warning: MySQL client not found. Please create database manually."
     fi
 fi
 
-# Check migration status
-echo "  Checking migration status..."
-MIGRATION_STATUS=$($PHP_BIN artisan migrate:status 2>&1 || echo "error")
+# Run migrations
+echo "  Running migrations..."
+$PHP_BIN artisan migrate --force
+echo "  Database migration: Complete"
 
-if echo "$MIGRATION_STATUS" | grep -q "Migration table not found\|error\|could not find driver"; then
-    # Fresh installation - run all migrations
-    echo "  Running migrations..."
-    $PHP_BIN artisan migrate --force
+echo ""
 
-    echo "  Running database seeders..."
-    $PHP_BIN artisan db:seed --force
+#######################################
+# Step 5.5: Generate PWA icons (if missing)
+#######################################
+if [ ! -f "public/icon-192.png" ] || [ ! -f "public/icon-512.png" ]; then
+    echo "[5.5/7] Generating PWA icons..."
 
-    echo "  Database migration: Complete"
-elif echo "$MIGRATION_STATUS" | grep -q "Pending"; then
-    # Pending migrations exist
-    echo "  Running pending migrations..."
-    $PHP_BIN artisan migrate --force
-    echo "  Database migration: Complete"
+    $PHP_BIN -r '
+    function createIcon($size, $filename) {
+        $img = imagecreatetruecolor($size, $size);
+        imagesavealpha($img, true);
+        imagealphablending($img, false);
+        $bg = imagecolorallocate($img, 79, 70, 229);
+        imagefill($img, 0, 0, $bg);
+        $white = imagecolorallocate($img, 255, 255, 255);
+        $padding = (int)($size * 0.1);
+        imagesetthickness($img, max(2, (int)($size * 0.02)));
+        imagearc($img, (int)($size/2), (int)($size/2), $size - $padding*2, $size - $padding*2, 0, 360, $white);
+        imagepng($img, $filename);
+    }
+    if (!file_exists("public/icon-192.png")) createIcon(192, "public/icon-192.png");
+    if (!file_exists("public/icon-512.png")) createIcon(512, "public/icon-512.png");
+    ' 2>/dev/null
+
+    if [ -f "public/icon-192.png" ] && [ -f "public/icon-512.png" ]; then
+        echo "  PWA icons: Generated"
+    else
+        echo "  Warning: Could not generate PWA icons (GD extension may be missing)"
+    fi
 else
-    echo "  All migrations already applied: OK"
+    echo "[5.5/7] PWA icons already exist"
 fi
 
 echo ""
@@ -309,23 +376,20 @@ echo "  - Frontend built"
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Review .env configuration:"
+echo "1. Ensure .env is configured:"
 echo "   - Database: DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD"
-echo "   - AI API keys: CLAUDE_API_KEY or OPENAI_API_KEY"
+echo "   - Admin user: ADMIN_USER_ID, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL"
 echo ""
-echo "2. Create an admin user:"
-echo "   $PHP_BIN artisan user:create"
+echo "2. For Apache, add to your virtual host config:"
 echo ""
-echo "3. For Apache, add to your virtual host config:"
-echo ""
-echo "   Alias /autosurvey $SCRIPT_DIR/public"
+echo "   Alias /surveymate $SCRIPT_DIR/public"
 echo "   <Directory $SCRIPT_DIR/public>"
 echo "       AllowOverride All"
 echo "       Require all granted"
 echo "   </Directory>"
 echo ""
-echo "4. Access the application at:"
-echo "   https://your-domain.org/autosurvey/"
+echo "3. Access the application at:"
+echo "   https://your-domain.org/surveymate/"
 echo ""
 echo "For development server:"
 echo "   $PHP_BIN artisan serve"

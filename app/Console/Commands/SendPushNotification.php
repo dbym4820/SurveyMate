@@ -42,7 +42,7 @@ class SendPushNotification extends Command
         $this->info('Sending test notification...');
 
         $payload = [
-            'title' => 'AutoSurvey テスト通知',
+            'title' => 'SurveyMate テスト通知',
             'body' => 'プッシュ通知が正常に設定されています！',
             'icon' => '/icon-192.png',
             'badge' => '/icon-192.png',
@@ -84,7 +84,7 @@ class SendPushNotification extends Command
             : "{$newPapersCount}件の新着論文があります";
 
         $payload = [
-            'title' => 'AutoSurvey 新着論文',
+            'title' => 'SurveyMate 新着論文',
             'body' => mb_strlen($bodyText) > 100 ? mb_substr($bodyText, 0, 97) . '...' : $bodyText,
             'icon' => '/icon-192.png',
             'badge' => '/icon-192.png',

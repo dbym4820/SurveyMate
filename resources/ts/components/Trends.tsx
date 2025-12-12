@@ -4,16 +4,7 @@ import {
   ChevronDown, ChevronUp, Clock, Target, Lightbulb
 } from 'lucide-react';
 import api, { getBasePath } from '../api';
-import Header from './Header';
-import type { User, AIProvider } from '../types';
-
-type PageType = 'papers' | 'journals' | 'settings' | 'trends';
-
-interface TrendsProps {
-  user: User;
-  onNavigate: (page: PageType) => void;
-  onLogout: () => void;
-}
+import type { AIProvider } from '../types';
 
 interface TrendStats {
   [period: string]: {
@@ -33,7 +24,7 @@ interface TrendSummary {
     paperCount: number;
   }>;
   emergingTrends: string[];
-  categoryInsights: Record<string, string>;
+  journalInsights: Record<string, string>;
   recommendations: string[];
 }
 
@@ -45,7 +36,6 @@ interface PeriodPaper {
   published_date: string | null;
   journal_name: string | null;
   journal_color: string;
-  category: string | null;
 }
 
 type Period = 'day' | 'week' | 'month' | 'halfyear';
@@ -57,7 +47,7 @@ const PERIODS: { id: Period; label: string; description: string }[] = [
   { id: 'halfyear', label: '半年', description: '過去6ヶ月' },
 ];
 
-export default function Trends({ user, onNavigate, onLogout }: TrendsProps): JSX.Element {
+export default function Trends(): JSX.Element {
   const [stats, setStats] = useState<TrendStats | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('week');
   const [papers, setPapers] = useState<PeriodPaper[]>([]);
@@ -181,16 +171,7 @@ export default function Trends({ user, onNavigate, onLogout }: TrendsProps): JSX
   const currentStats = stats?.[selectedPeriod];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <Header
-        user={user}
-        currentPage="trends"
-        onNavigate={onNavigate}
-        onLogout={onLogout}
-      />
-
-      <main className="max-w-6xl mx-auto px-4 py-6">
+    <main className="max-w-6xl mx-auto px-4 py-6">
         {/* Page Title */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900">トレンド分析</h2>
@@ -355,16 +336,16 @@ export default function Trends({ user, onNavigate, onLogout }: TrendsProps): JSX
                 </div>
               )}
 
-              {/* Category Insights */}
-              {summary.categoryInsights && Object.keys(summary.categoryInsights).length > 0 && (
+              {/* Journal Insights */}
+              {summary.journalInsights && Object.keys(summary.journalInsights).length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    カテゴリ別傾向
+                    論文誌別傾向
                   </h3>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {Object.entries(summary.categoryInsights).map(([category, insight]) => (
-                      <div key={category} className="p-4 bg-blue-50 rounded-lg">
-                        <span className="font-semibold text-blue-900">{category}</span>
+                    {Object.entries(summary.journalInsights).map(([journal, insight]) => (
+                      <div key={journal} className="p-4 bg-blue-50 rounded-lg">
+                        <span className="font-semibold text-blue-900">{journal}</span>
                         <p className="text-sm text-blue-700 mt-1">{insight}</p>
                       </div>
                     ))}
@@ -467,6 +448,5 @@ export default function Trends({ user, onNavigate, onLogout }: TrendsProps): JSX
           )}
         </div>
       </main>
-    </div>
   );
 }
