@@ -1,17 +1,23 @@
 # OS files
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
+.#*
 
 # Environment files
 .env
 *.env.local
+.env.*
+!.env.example
 
-# Lock files
+# Lock files (regenerated on each platform)
 *.lock
 package-lock.json
 composer.lock
 
-# Dependencies
+# Dependencies (platform-specific binaries)
 /node_modules/
 /vendor/
 
@@ -22,7 +28,7 @@ composer.lock
 /bootstrap/cache/*
 !/bootstrap/cache/.gitkeep
 
-# Vite build output
+# Vite/Frontend build output
 /public/build/
 /public/hot
 
@@ -30,18 +36,25 @@ composer.lock
 /logs/*
 !/logs/.gitkeep
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # IDE
 .idea/
 .vscode/
-*.swp
-*.swo
-*~
+*.sublime-project
+*.sublime-workspace
 
 # Testing
 .phpunit.result.cache
 /coverage/
+.nyc_output/
 
 # Misc
 *.bak
 *.tmp
+*.cache
+
+# Generated files
+/public/icon-*.png

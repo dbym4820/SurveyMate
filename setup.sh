@@ -167,6 +167,13 @@ echo ""
 #######################################
 echo "[4/7] Installing Node.js dependencies..."
 
+# Clean install to ensure platform-specific binaries are correct
+# This handles the case where node_modules was copied from a different OS
+if [ -d "node_modules" ]; then
+    echo "  Removing existing node_modules (ensures correct platform binaries)..."
+    rm -rf node_modules
+fi
+
 npm install
 
 echo "  Node.js dependencies: Complete"
