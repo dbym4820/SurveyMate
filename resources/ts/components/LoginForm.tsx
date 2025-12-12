@@ -166,6 +166,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             </label>
             <input
               type="text"
+              name="username"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
@@ -221,6 +222,7 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
             </label>
             <input
               type="password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
