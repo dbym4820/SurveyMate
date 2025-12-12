@@ -8,9 +8,7 @@
 */
 $defaultJournals = [
     [
-        'id' => 'ijaied',
-        'name' => 'IJAIED',
-        'full_name' => 'International Journal of Artificial Intelligence in Education',
+        'name' => 'International Journal of Artificial Intelligence in Education',
         'rss_url' => 'https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=40593',
         'color' => 'bg-blue-500',
     ],
@@ -64,5 +62,23 @@ return [
     */
 
     'default_journals' => $defaultJournals,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Full Text Fetching Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Settings for automatic full text extraction from academic papers.
+    | Unpaywall API requires an email for identification (rate limiting).
+    |
+    */
+
+    'full_text' => [
+        'enabled' => env('FULLTEXT_FETCH_ENABLED', true),
+        'unpaywall_email' => env('UNPAYWALL_EMAIL', ''),
+        'max_text_length' => env('FULLTEXT_MAX_LENGTH', 100000),
+        'timeout' => env('FULLTEXT_TIMEOUT', 30),
+        'retry_failed' => env('FULLTEXT_RETRY_FAILED', false),
+    ],
 
 ];

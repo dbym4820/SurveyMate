@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use App\Services\AiSummaryService;
 use App\Services\RssFetcherService;
+use App\Services\FullTextFetcherService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,8 +20,12 @@ class AppServiceProvider extends ServiceProvider
             return new AiSummaryService();
         });
 
+        $this->app->singleton(FullTextFetcherService::class, function ($app) {
+            return new FullTextFetcherService();
+        });
+
         $this->app->singleton(RssFetcherService::class, function ($app) {
-            return new RssFetcherService();
+            return new RssFetcherService($app->make(FullTextFetcherService::class));
         });
     }
 

@@ -15,20 +15,11 @@ class Journal extends Model
         'id',
         'user_id',
         'name',
-        'full_name',
         'rss_url',
         'color',
         'is_active',
         'last_fetched_at',
     ];
-
-    /**
-     * 表示用の論文誌名を取得（full_nameがあればそれを，なければnameを返す）
-     */
-    public function getDisplayNameAttribute(): string
-    {
-        return $this->full_name ?: $this->name;
-    }
 
     protected $casts = [
         'is_active' => 'boolean',

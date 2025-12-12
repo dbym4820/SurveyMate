@@ -15,6 +15,9 @@ class Paper extends Model
         'title',
         'authors',
         'abstract',
+        'full_text',
+        'full_text_source',
+        'full_text_fetched_at',
         'url',
         'doi',
         'published_date',
@@ -25,7 +28,24 @@ class Paper extends Model
         'authors' => 'array',
         'published_date' => 'date',
         'fetched_at' => 'datetime',
+        'full_text_fetched_at' => 'datetime',
     ];
+
+    /**
+     * 本文が取得済みかどうか
+     */
+    public function hasFullText(): bool
+    {
+        return !empty($this->full_text);
+    }
+
+    /**
+     * 要約に使用するテキストを取得（本文優先，なければアブストラクト）
+     */
+    public function getTextForSummary(): ?string
+    {
+        return $this->full_text ?? $this->abstract;
+    }
 
     public function journal(): BelongsTo
     {

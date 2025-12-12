@@ -16,6 +16,15 @@ class RssFetcherService
     /** @var \DateTime|null */
     private $lastRunTime = null;
 
+    private FullTextFetcherService $fullTextFetcher;
+    private bool $fullTextEnabled;
+
+    public function __construct(FullTextFetcherService $fullTextFetcher)
+    {
+        $this->fullTextFetcher = $fullTextFetcher;
+        $this->fullTextEnabled = config('surveymate.full_text.enabled', true);
+    }
+
     public function getStatus(): array
     {
         return [
@@ -99,13 +108,22 @@ class RssFetcherService
             $items = $feed->get_items();
             $papersFetched = count($items);
             $newPapers = 0;
+            $fullTextFetched = 0;
 
             foreach ($items as $item) {
                 $paper = $this->parseFeedItem($item, $journal);
                 if ($paper) {
-                    $inserted = $this->upsertPaper($paper);
-                    if ($inserted) {
+                    $result = $this->upsertPaper($paper);
+                    if ($result['inserted']) {
                         $newPapers++;
+
+                        // 新規論文の本文取得（有効な場合）
+                        if ($this->fullTextEnabled && $result['paper']) {
+                            $ftResult = $this->fetchFullTextForPaper($result['paper']);
+                            if ($ftResult) {
+                                $fullTextFetched++;
+                            }
+                        }
                     }
                 }
             }
@@ -118,12 +136,13 @@ class RssFetcherService
             // Log success
             FetchLog::logSuccess($journal->id, $papersFetched, $newPapers, $executionTimeMs);
 
-            Log::info("Fetched {$papersFetched} papers ({$newPapers} new) for {$journal->name}");
+            Log::info("Fetched {$papersFetched} papers ({$newPapers} new, {$fullTextFetched} full text) for {$journal->name}");
 
             return [
                 'status' => 'success',
                 'papers_fetched' => $papersFetched,
                 'new_papers' => $newPapers,
+                'full_text_fetched' => $fullTextFetched,
                 'execution_time_ms' => $executionTimeMs,
             ];
 
@@ -198,13 +217,45 @@ class RssFetcherService
             $doi = $matches[0];
         }
 
-        // Get abstract from content or description
-        $abstract = $item->get_content() ?? $item->get_description();
-        if ($abstract) {
+        // Get abstract from description (preferred for academic papers)
+        // get_description() typically contains the paper abstract
+        // get_content() often contains journal boilerplate or full HTML
+        $abstract = null;
+        $description = $item->get_description();
+        $content = $item->get_content();
+
+        // Prefer description over content for academic RSS feeds
+        $rawAbstract = $description ?: $content;
+
+        if ($rawAbstract) {
             // Strip HTML tags
-            $abstract = strip_tags($abstract);
+            $cleanAbstract = strip_tags($rawAbstract);
             // Clean up whitespace
-            $abstract = preg_replace('/\s+/', ' ', trim($abstract));
+            $cleanAbstract = preg_replace('/\s+/', ' ', trim($cleanAbstract));
+
+            // Filter out journal boilerplate/descriptions (common patterns)
+            $boilerplatePatterns = [
+                '/^The International Journal of/i',
+                '/^This journal publishes/i',
+                '/^Subscribe to/i',
+                '/^Access the full/i',
+                '/^Click here/i',
+                '/^Read the full/i',
+                '/publishes original research/i',
+            ];
+
+            $isBoilerplate = false;
+            foreach ($boilerplatePatterns as $pattern) {
+                if (preg_match($pattern, $cleanAbstract)) {
+                    $isBoilerplate = true;
+                    break;
+                }
+            }
+
+            // Only use abstract if it's not boilerplate and has meaningful length
+            if (!$isBoilerplate && strlen($cleanAbstract) > 50) {
+                $abstract = $cleanAbstract;
+            }
         }
 
         // Parse date
@@ -229,7 +280,27 @@ class RssFetcherService
         ];
     }
 
-    private function upsertPaper(array $data): bool
+    /**
+     * 論文の本文を取得して保存
+     */
+    private function fetchFullTextForPaper(Paper $paper): bool
+    {
+        $result = $this->fullTextFetcher->fetchFullText($paper);
+
+        if ($result['success']) {
+            $paper->update([
+                'full_text' => $result['text'],
+                'full_text_source' => $result['source'],
+                'full_text_fetched_at' => now(),
+            ]);
+            return true;
+        }
+
+        Log::debug("Full text fetch failed for paper {$paper->id}: {$result['error']}");
+        return false;
+    }
+
+    private function upsertPaper(array $data): array
     {
         try {
             $existing = Paper::where('journal_id', $data['journal_id'])
@@ -237,22 +308,22 @@ class RssFetcherService
                 ->first();
 
             if ($existing) {
-                // Update existing
+                // Update existing - always update abstract to fix boilerplate issues
                 $existing->update([
-                    'abstract' => $data['abstract'] ?? $existing->abstract,
+                    'abstract' => $data['abstract'],  // Allow null to clear boilerplate
                     'url' => $data['url'] ?? $existing->url,
                     'doi' => $data['doi'] ?? $existing->doi,
                 ]);
-                return false;
+                return ['inserted' => false, 'paper' => $existing];
             }
 
             // Create new
-            Paper::create($data);
-            return true;
+            $paper = Paper::create($data);
+            return ['inserted' => true, 'paper' => $paper];
 
         } catch (\Exception $e) {
             Log::warning("Failed to upsert paper: {$e->getMessage()}", ['title' => $data['title']]);
-            return false;
+            return ['inserted' => false, 'paper' => null];
         }
     }
 

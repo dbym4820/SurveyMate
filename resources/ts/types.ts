@@ -13,8 +13,6 @@ export interface User {
 export interface Journal {
   id: string;
   name: string;
-  full_name?: string | null;
-  display_name?: string;
   rss_url: string;
   color: string;
   is_active: number | boolean;
@@ -43,6 +41,8 @@ export interface Paper {
   journal_name: string;
   journal_color: string;
   has_summary?: number;
+  has_full_text?: boolean;
+  full_text_source?: string | null;
   summaries?: Summary[];
   tags?: Tag[];
 }
@@ -163,9 +163,7 @@ export interface GenerateSummaryResponse {
 
 // Form data types
 export interface JournalFormData {
-  id: string;
   name: string;
-  full_name?: string;
   rssUrl: string;
   color: string;
 }
@@ -210,4 +208,88 @@ export interface TagPapersResponse {
   success: boolean;
   tag: Tag;
   papers: Paper[];
+  latest_summary: TagSummary | null;
+}
+
+// Profile types
+export interface Profile {
+  user_id: string;
+  username: string;
+  email: string | null;
+}
+
+export interface ProfileResponse {
+  success: boolean;
+  profile: Profile;
+}
+
+export interface ProfileUpdateResponse {
+  success: boolean;
+  message: string;
+  updated: Record<string, string | null>;
+  profile: Profile;
+}
+
+// Summary Chat types
+export interface ChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  ai_provider?: string | null;
+  ai_model?: string | null;
+  tokens_used?: number | null;
+  created_at: string;
+}
+
+export interface ChatMessagesResponse {
+  success: boolean;
+  messages: ChatMessage[];
+}
+
+export interface ChatSendResponse {
+  success: boolean;
+  user_message: ChatMessage;
+  ai_message: ChatMessage;
+}
+
+// Tag Summary types
+export interface TagSummary {
+  id: number;
+  perspective_prompt: string;
+  summary_text: string;
+  ai_provider: string;
+  ai_model: string | null;
+  paper_count: number;
+  tokens_used: number | null;
+  generation_time_ms: number | null;
+  created_at: string;
+}
+
+export interface TagSummariesResponse {
+  success: boolean;
+  tag: Tag;
+  summaries: TagSummary[];
+}
+
+export interface TagSummaryResponse {
+  success: boolean;
+  summary: TagSummary;
+}
+
+// Research Perspective types（調査観点設定）
+export interface ResearchPerspective {
+  research_fields: string;     // 研究分野や興味のある観点
+  summary_perspective: string; // 要約してほしい観点
+  reading_focus: string;       // 論文を読む際に着目する観点
+}
+
+export interface ResearchPerspectiveResponse {
+  success: boolean;
+  research_perspective: ResearchPerspective;
+}
+
+export interface ResearchPerspectiveUpdateResponse {
+  success: boolean;
+  message: string;
+  research_perspective: ResearchPerspective;
 }

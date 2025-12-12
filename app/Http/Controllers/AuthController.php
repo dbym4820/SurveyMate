@@ -192,13 +192,13 @@ class AuthController extends Controller
 
         foreach ($defaultJournals as $journalConfig) {
             $name = $journalConfig['name'];
-            $journalId = ($journalConfig['id'] ?? strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name))) . '-' . $user->id;
+            // IDは正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
+            $journalId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name)) . '-' . $user->id;
 
             $journal = Journal::create([
                 'id' => $journalId,
                 'user_id' => $user->id,
                 'name' => $name,
-                'full_name' => $journalConfig['full_name'] ?? null,
                 'rss_url' => $journalConfig['rss_url'],
                 'color' => $journalConfig['color'] ?? 'bg-gray-500',
                 'is_active' => true,

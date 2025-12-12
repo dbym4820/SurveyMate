@@ -10,6 +10,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TrendController;
 use App\Http\Controllers\PushController;
 use App\Http\Controllers\TagController;
+use App\Http\Controllers\SummaryChatController;
 use App\Http\Middleware\SessionAuth;
 use App\Http\Middleware\AdminOnly;
 
@@ -65,6 +66,7 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::get('/papers', [PaperController::class, 'index']);
     Route::get('/papers/stats', [PaperController::class, 'stats']);
     Route::get('/papers/{id}', [PaperController::class, 'show']);
+    Route::get('/papers/{id}/full-text', [PaperController::class, 'getFullText']);
 
     // Tags
     Route::prefix('tags')->group(function () {
@@ -73,6 +75,10 @@ Route::middleware(SessionAuth::class)->group(function () {
         Route::put('/{id}', [TagController::class, 'update']);
         Route::delete('/{id}', [TagController::class, 'destroy']);
         Route::get('/{id}/papers', [TagController::class, 'papersByTag']);
+        // タグ要約
+        Route::get('/{id}/summaries', [TagController::class, 'getSummaries']);
+        Route::post('/{id}/summaries', [TagController::class, 'generateSummary']);
+        Route::delete('/{id}/summaries/{summaryId}', [TagController::class, 'deleteSummary']);
     });
 
     // Paper tags
@@ -88,10 +94,25 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::post('/summaries/generate', [SummaryController::class, 'generate']);
     Route::get('/summaries/{paperId}', [SummaryController::class, 'byPaper']);
 
+    // Summary Chat (AI conversation about summaries)
+    Route::prefix('summaries/{summaryId}/chat')->group(function () {
+        Route::get('/', [SummaryChatController::class, 'index']);
+        Route::post('/', [SummaryChatController::class, 'send']);
+        Route::delete('/', [SummaryChatController::class, 'clear']);
+    });
+
     // User Settings (API keys)
     Route::get('/settings/api', [SettingsController::class, 'getApiSettings']);
     Route::put('/settings/api', [SettingsController::class, 'updateApiSettings']);
     Route::delete('/settings/api/{provider}', [SettingsController::class, 'deleteApiKey']);
+
+    // User Profile
+    Route::get('/settings/profile', [SettingsController::class, 'getProfile']);
+    Route::put('/settings/profile', [SettingsController::class, 'updateProfile']);
+
+    // Research Perspective（調査観点設定）
+    Route::get('/settings/research-perspective', [SettingsController::class, 'getResearchPerspective']);
+    Route::put('/settings/research-perspective', [SettingsController::class, 'updateResearchPerspective']);
 
     // Trends
     Route::prefix('trends')->group(function () {

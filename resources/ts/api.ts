@@ -15,6 +15,14 @@ import type {
   TagsResponse,
   TagResponse,
   TagPapersResponse,
+  TagSummariesResponse,
+  TagSummaryResponse,
+  ProfileResponse,
+  ProfileUpdateResponse,
+  ChatMessagesResponse,
+  ChatSendResponse,
+  ResearchPerspectiveResponse,
+  ResearchPerspectiveUpdateResponse,
 } from './types';
 
 // ベースパス（現在のURLから自動検出）
@@ -131,6 +139,14 @@ export const api = {
       if (params.offset) query.set('offset', params.offset.toString());
       return request(`/papers?${query}`);
     },
+    getFullText: (paperId: number): Promise<{
+      success: boolean;
+      paper_id: number;
+      title: string;
+      full_text: string;
+      full_text_source: string | null;
+      full_text_fetched_at: string | null;
+    }> => request(`/papers/${paperId}/full-text`),
   },
 
   // タグ
@@ -149,6 +165,13 @@ export const api = {
       request(`/papers/${paperId}/tags`, { method: 'POST', body: JSON.stringify(data) }),
     removeFromPaper: (paperId: number, tagId: number): Promise<{ success: boolean; message: string }> =>
       request(`/papers/${paperId}/tags/${tagId}`, { method: 'DELETE' }),
+    // タグ要約
+    getSummaries: (tagId: number): Promise<TagSummariesResponse> =>
+      request(`/tags/${tagId}/summaries`),
+    generateSummary: (tagId: number, perspectivePrompt: string, provider?: string): Promise<TagSummaryResponse> =>
+      request(`/tags/${tagId}/summaries`, { method: 'POST', body: JSON.stringify({ perspective_prompt: perspectivePrompt, provider }) }),
+    deleteSummary: (tagId: number, summaryId: number): Promise<{ success: boolean; message: string }> =>
+      request(`/tags/${tagId}/summaries/${summaryId}`, { method: 'DELETE' }),
   },
 
   // AI要約
@@ -157,6 +180,15 @@ export const api = {
       request('/summaries/providers'),
     generate: (paperId: number, provider?: string): Promise<GenerateSummaryResponse> =>
       request('/summaries/generate', { method: 'POST', body: JSON.stringify({ paperId, provider }) }),
+    // チャット（要約についての会話）
+    chat: {
+      getMessages: (summaryId: number): Promise<ChatMessagesResponse> =>
+        request(`/summaries/${summaryId}/chat`),
+      send: (summaryId: number, message: string): Promise<ChatSendResponse> =>
+        request(`/summaries/${summaryId}/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
+      clear: (summaryId: number): Promise<{ success: boolean; message: string }> =>
+        request(`/summaries/${summaryId}/chat`, { method: 'DELETE' }),
+    },
   },
 
   // 管理者
@@ -181,6 +213,19 @@ export const api = {
       request('/settings/api', { method: 'PUT', body: JSON.stringify(data) }),
     deleteApiKey: (provider: 'claude' | 'openai'): Promise<ApiSettingsResponse> =>
       request(`/settings/api/${provider}`, { method: 'DELETE' }),
+    getProfile: (): Promise<ProfileResponse> =>
+      request('/settings/profile'),
+    updateProfile: (data: { username?: string; email?: string | null }): Promise<ProfileUpdateResponse> =>
+      request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
+    // 調査観点設定
+    getResearchPerspective: (): Promise<ResearchPerspectiveResponse> =>
+      request('/settings/research-perspective'),
+    updateResearchPerspective: (data: {
+      research_fields?: string;
+      summary_perspective?: string;
+      reading_focus?: string;
+    }): Promise<ResearchPerspectiveUpdateResponse> =>
+      request('/settings/research-perspective', { method: 'PUT', body: JSON.stringify(data) }),
   },
 
   // プッシュ通知

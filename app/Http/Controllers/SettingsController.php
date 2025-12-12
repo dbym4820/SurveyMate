@@ -198,4 +198,143 @@ class SettingsController extends Controller
     {
         return strpos($key, 'sk-') === 0 && strlen($key) > 20;
     }
+
+    /**
+     * Get current user's profile
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getProfile(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        return response()->json([
+            'success' => true,
+            'profile' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+            ],
+        ]);
+    }
+
+    /**
+     * Update current user's profile (username, email)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $validator = Validator::make($request->all(), [
+            'username' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|nullable|email|max:255',
+        ], [
+            'username.required' => '表示名を入力してください',
+            'username.max' => '表示名は255文字以内で入力してください',
+            'email.email' => '有効なメールアドレスを入力してください',
+            'email.max' => 'メールアドレスは255文字以内で入力してください',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'details' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+        $updated = [];
+
+        if (array_key_exists('username', $data)) {
+            $user->username = $data['username'];
+            $updated['username'] = $data['username'];
+        }
+
+        if (array_key_exists('email', $data)) {
+            $user->email = $data['email'];
+            $updated['email'] = $data['email'];
+        }
+
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'プロフィールを更新しました',
+            'updated' => $updated,
+            'profile' => [
+                'user_id' => $user->user_id,
+                'username' => $user->username,
+                'email' => $user->email,
+            ],
+        ]);
+    }
+
+    /**
+     * Get current user's research perspective settings
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getResearchPerspective(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $perspective = $user->research_perspective ?? [
+            'research_fields' => '',
+            'summary_perspective' => '',
+            'reading_focus' => '',
+        ];
+
+        return response()->json([
+            'success' => true,
+            'research_perspective' => $perspective,
+        ]);
+    }
+
+    /**
+     * Update current user's research perspective settings
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function updateResearchPerspective(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $validator = Validator::make($request->all(), [
+            'research_fields' => 'nullable|string|max:2000',
+            'summary_perspective' => 'nullable|string|max:2000',
+            'reading_focus' => 'nullable|string|max:2000',
+        ], [
+            'research_fields.max' => '研究分野・興味は2000文字以内で入力してください',
+            'summary_perspective.max' => '要約観点は2000文字以内で入力してください',
+            'reading_focus.max' => '読解観点は2000文字以内で入力してください',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'details' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
+        $user->research_perspective = [
+            'research_fields' => $data['research_fields'] ?? '',
+            'summary_perspective' => $data['summary_perspective'] ?? '',
+            'reading_focus' => $data['reading_focus'] ?? '',
+        ];
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => '調査観点設定を更新しました',
+            'research_perspective' => $user->research_perspective,
+        ]);
+    }
 }

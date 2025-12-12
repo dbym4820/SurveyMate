@@ -23,7 +23,8 @@ return new class extends Migration
         foreach ($users as $user) {
             foreach ($defaultJournals as $journalConfig) {
                 $name = $journalConfig['name'];
-                $baseId = $journalConfig['id'] ?? strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name));
+                // IDは正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
+                $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name));
                 $journalId = $baseId . '-' . $user->id;
 
                 // 既に同じIDの論文誌が存在する場合はスキップ
@@ -42,7 +43,6 @@ return new class extends Migration
                     'id' => $journalId,
                     'user_id' => $user->id,
                     'name' => $name,
-                    'full_name' => $journalConfig['full_name'] ?? null,
                     'rss_url' => $journalConfig['rss_url'],
                     'color' => $journalConfig['color'] ?? 'bg-gray-500',
                     'is_active' => true,
@@ -68,8 +68,8 @@ return new class extends Migration
         $defaultJournals = config('surveymate.default_journals', []);
 
         foreach ($defaultJournals as $journalConfig) {
-            $baseId = $journalConfig['id'] ?? strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $journalConfig['name']));
-            // パターンマッチで削除（例: ijaied-1, ijaied-2 など）
+            $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $journalConfig['name']));
+            // パターンマッチで削除（例: internationaljournalofartificialintelligenceineducation-1 など）
             Journal::where('id', 'like', $baseId . '-%')->delete();
         }
     }

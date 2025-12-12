@@ -108,9 +108,7 @@ class AdminController extends Controller
         }
 
         $validator = Validator::make($data, [
-            'id' => 'required|string|max:50',
-            'name' => 'required|string|max:255',
-            'full_name' => 'nullable|string|max:500',
+            'name' => 'required|string|max:500',
             'rss_url' => 'required|url|max:500',
             'color' => 'nullable|string|max:50',
         ]);
@@ -119,15 +117,20 @@ class AdminController extends Controller
             return response()->json(['error' => $validator->errors()->first()], 400);
         }
 
-        // IDの重複チェック（ユーザーごと）
-        $existingJournal = Journal::forUser($user->id)->where('id', $data['id'])->first();
-        if ($existingJournal) {
-            return response()->json(['error' => 'この論文誌IDは既に使用されています'], 400);
-        }
-
         $journalData = $validator->validated();
         $journalData['user_id'] = $user->id;
 
+        // IDを正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
+        $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $journalData['name']));
+        $journalId = $baseId . '-' . $user->id;
+
+        // IDの重複チェック（ユーザーごと）
+        $existingJournal = Journal::forUser($user->id)->where('id', $journalId)->first();
+        if ($existingJournal) {
+            return response()->json(['error' => 'この論文誌名は既に使用されています'], 400);
+        }
+
+        $journalData['id'] = $journalId;
         $journal = Journal::create($journalData);
 
         // 初回RSSフェッチを実行
@@ -158,8 +161,7 @@ class AdminController extends Controller
         }
 
         $validator = Validator::make($data, [
-            'name' => 'nullable|string|max:255',
-            'full_name' => 'nullable|string|max:500',
+            'name' => 'nullable|string|max:500',
             'rss_url' => 'nullable|url|max:500',
             'color' => 'nullable|string|max:50',
             'is_active' => 'nullable|boolean',

@@ -95,6 +95,30 @@ class PaperController extends Controller
         return response()->json($stats);
     }
 
+    public function getFullText(Request $request, int $id): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $paper = Paper::forUser($user->id)->find($id);
+
+        if (!$paper) {
+            return response()->json(['success' => false, 'error' => '論文が見つかりません'], 404);
+        }
+
+        if (!$paper->hasFullText()) {
+            return response()->json(['success' => false, 'error' => '本文が取得されていません'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'paper_id' => $paper->id,
+            'title' => $paper->title,
+            'full_text' => $paper->full_text,
+            'full_text_source' => $paper->full_text_source,
+            'full_text_fetched_at' => $paper->full_text_fetched_at?->toISOString(),
+        ]);
+    }
+
     private function formatPaper(Paper $paper, bool $detailed = false): array
     {
         $data = [
@@ -109,18 +133,18 @@ class PaperController extends Controller
             'published_date' => $paper->published_date ? $paper->published_date->format('Y-m-d') : null,
             'fetched_at' => $paper->fetched_at ? $paper->fetched_at->toISOString() : null,
             // Flat fields for frontend compatibility
-            'journal_name' => $paper->journal ? $paper->journal->display_name : null,
+            'journal_name' => $paper->journal ? $paper->journal->name : null,
             'journal_color' => $paper->journal ? $paper->journal->color : 'bg-gray-500',
             // Nested journal object (for backward compatibility)
             'journal' => $paper->journal ? [
                 'id' => $paper->journal->id,
                 'name' => $paper->journal->name,
-                'full_name' => $paper->journal->full_name,
-                'display_name' => $paper->journal->display_name,
                 'color' => $paper->journal->color,
             ] : null,
             'summary_count' => $paper->summaries->count(),
             'has_summary' => $paper->summaries->count() > 0 ? 1 : 0,
+            'has_full_text' => $paper->hasFullText(),
+            'full_text_source' => $paper->full_text_source,
             // Always include summaries for frontend to show existing summaries
             'summaries' => $paper->summaries->map(function ($s) {
                 return [

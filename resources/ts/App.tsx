@@ -113,6 +113,7 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
         <Route path="/papers" element={<PaperList />} />
         <Route path="/journals" element={<JournalManagement />} />
         <Route path="/tags" element={<TagManagement />} />
+        <Route path="/tags/:tagId" element={<TagManagement />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/genai-api" element={<Settings />} />
         <Route path="/trends" element={<Trends />} />

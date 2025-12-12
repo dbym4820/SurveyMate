@@ -25,8 +25,6 @@ class JournalController extends Controller
                 return [
                     'id' => $j->id,
                     'name' => $j->name,
-                    'full_name' => $j->full_name,
-                    'display_name' => $j->display_name,
                     'rss_url' => $j->rss_url,
                     'color' => $j->color,
                     'is_active' => $j->is_active,
@@ -58,8 +56,6 @@ class JournalController extends Controller
         return response()->json([
             'id' => $journal->id,
             'name' => $journal->name,
-            'full_name' => $journal->full_name,
-            'display_name' => $journal->display_name,
             'rss_url' => $journal->rss_url,
             'color' => $journal->color,
             'is_active' => $journal->is_active,

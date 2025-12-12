@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Filter, Calendar, Sparkles, ChevronDown, ChevronUp, Loader2, FileText, Tag, X
+  Filter, Calendar, Sparkles, ChevronDown, ChevronUp, Loader2, FileText, Tag, X, BookOpen
 } from 'lucide-react';
 import api from '../api';
 import PaperCard from './PaperCard';
+import TagSummaryModal from './TagSummaryModal';
 import Toast, { ToastType } from './Toast';
 import { DATE_FILTERS } from '../constants';
 import type { Paper, Journal, AIProvider, Pagination, Tag as TagType } from '../types';
@@ -15,6 +17,7 @@ interface ToastState {
 }
 
 export default function PaperList(): JSX.Element {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
@@ -27,6 +30,7 @@ export default function PaperList(): JSX.Element {
   const [allTags, setAllTags] = useState<TagType[]>([]);
   const [selectedTags, setSelectedTags] = useState<number[]>([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
+  const [tagSummaryTag, setTagSummaryTag] = useState<TagType | null>(null);
 
   // Toast notification
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
@@ -87,6 +91,31 @@ export default function PaperList(): JSX.Element {
     fetchJournals();
     fetchTags();
   }, [fetchJournals, fetchTags]);
+
+  // URLパラメータからタグ要約モーダルを開く
+  useEffect(() => {
+    const tagSummaryId = searchParams.get('tagSummary');
+    if (tagSummaryId && allTags.length > 0) {
+      const tagId = parseInt(tagSummaryId, 10);
+      const tag = allTags.find((t) => t.id === tagId);
+      if (tag) {
+        setTagSummaryTag(tag);
+      }
+    }
+  }, [searchParams, allTags]);
+
+  // タグ要約モーダルを開く（URLも更新）
+  const openTagSummary = (tag: TagType): void => {
+    setTagSummaryTag(tag);
+    setSearchParams({ tagSummary: tag.id.toString() });
+  };
+
+  // タグ要約モーダルを閉じる（URLからパラメータを削除）
+  const closeTagSummary = (): void => {
+    setTagSummaryTag(null);
+    searchParams.delete('tagSummary');
+    setSearchParams(searchParams);
+  };
 
   // Toggle tag selection
   const toggleTag = (tagId: number): void => {
@@ -255,24 +284,40 @@ export default function PaperList(): JSX.Element {
                       </div>
                       <div className="space-y-1 max-h-64 overflow-y-auto">
                         {allTags.map((tag) => (
-                          <label
+                          <div
                             key={tag.id}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                            className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group"
                           >
-                            <input
-                              type="checkbox"
-                              checked={selectedTags.includes(tag.id)}
-                              onChange={() => toggleTag(tag.id)}
-                              className="w-4 h-4 text-indigo-600 rounded"
-                            />
-                            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${tag.color}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{tag.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {tag.paper_count || 0}件
+                            <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedTags.includes(tag.id)}
+                                onChange={() => toggleTag(tag.id)}
+                                className="w-4 h-4 text-indigo-600 rounded"
+                              />
+                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${tag.color}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{tag.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {tag.paper_count || 0}件
+                                </div>
                               </div>
-                            </div>
-                          </label>
+                            </label>
+                            {/* タグ要約ボタン */}
+                            {(tag.paper_count ?? 0) > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openTagSummary(tag);
+                                  setShowTagFilter(false);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                title="タグの論文を要約"
+                              >
+                                <BookOpen className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -380,6 +425,14 @@ export default function PaperList(): JSX.Element {
           message={toast.message}
           type={toast.type}
           onClose={hideToast}
+        />
+      )}
+
+      {/* Tag Summary Modal */}
+      {tagSummaryTag && (
+        <TagSummaryModal
+          tag={tagSummaryTag}
+          onClose={closeTagSummary}
         />
       )}
     </>

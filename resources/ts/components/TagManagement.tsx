@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Tag, Plus, Edit, Trash2, Loader2, FileText, ChevronRight,
-  X, ExternalLink, ArrowLeft, Sparkles
+  X, ArrowLeft, Sparkles, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 import api from '../api';
 import { AVAILABLE_COLORS } from '../constants';
-import type { Tag as TagType, Paper } from '../types';
+import type { Tag as TagType, Paper, TagSummary } from '../types';
+import PaperCard from './PaperCard';
 
 interface TagFormData {
   name: string;
@@ -20,6 +22,9 @@ const initialFormData: TagFormData = {
 };
 
 export default function TagManagement(): JSX.Element {
+  const navigate = useNavigate();
+  const { tagId } = useParams<{ tagId: string }>();
+
   const [tags, setTags] = useState<TagType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -31,6 +36,15 @@ export default function TagManagement(): JSX.Element {
   const [selectedTag, setSelectedTag] = useState<TagType | null>(null);
   const [tagPapers, setTagPapers] = useState<Paper[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(false);
+
+  // AI要約用のプロバイダー設定
+  const [selectedProvider, setSelectedProvider] = useState('openai');
+
+  // グループ要約用
+  const [latestSummary, setLatestSummary] = useState<TagSummary | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [perspectivePrompt, setPerspectivePrompt] = useState('');
+  const [summaryExpanded, setSummaryExpanded] = useState(true);
 
   // タグ一覧を取得
   const fetchTags = useCallback(async (): Promise<void> => {
@@ -51,22 +65,83 @@ export default function TagManagement(): JSX.Element {
     fetchTags();
   }, [fetchTags]);
 
+  // ユーザーのAIプロバイダー設定を取得
+  useEffect(() => {
+    const fetchProviderSettings = async (): Promise<void> => {
+      try {
+        const data = await api.settings.getApi();
+        if (data.preferred_ai_provider) {
+          setSelectedProvider(data.preferred_ai_provider);
+        }
+      } catch (error) {
+        console.error('Failed to fetch provider settings:', error);
+      }
+    };
+    fetchProviderSettings();
+  }, []);
+
   // タグの論文一覧を取得
-  const fetchTagPapers = async (tag: TagType): Promise<void> => {
-    setSelectedTag(tag);
+  const fetchTagPapers = useCallback(async (tagIdToFetch: number): Promise<void> => {
     setLoadingPapers(true);
     try {
-      const data = await api.tags.papers(tag.id);
+      const data = await api.tags.papers(tagIdToFetch);
       if (data.success) {
         setTagPapers(data.papers);
-        // タグ情報も更新（descriptionなど）
         setSelectedTag(data.tag);
+        setLatestSummary(data.latest_summary);
+        // タグの説明があれば、デフォルトの観点として設定
+        if (data.tag.description && !perspectivePrompt) {
+          setPerspectivePrompt(data.tag.description);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch tag papers:', error);
     } finally {
       setLoadingPapers(false);
     }
+  }, [perspectivePrompt]);
+
+  // URLパラメータからタグIDを取得して詳細を表示
+  useEffect(() => {
+    if (tagId) {
+      const id = parseInt(tagId, 10);
+      if (!isNaN(id)) {
+        fetchTagPapers(id);
+      }
+    } else {
+      setSelectedTag(null);
+      setTagPapers([]);
+      setLatestSummary(null);
+      setPerspectivePrompt('');
+    }
+  }, [tagId, fetchTagPapers]);
+
+  // グループ要約を生成
+  const generateGroupSummary = async (): Promise<void> => {
+    if (!selectedTag || !perspectivePrompt.trim()) {
+      alert('要約の観点を入力してください');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const data = await api.tags.generateSummary(selectedTag.id, perspectivePrompt.trim());
+      if (data.success) {
+        setLatestSummary(data.summary);
+        setSummaryExpanded(true);
+      }
+    } catch (error) {
+      console.error('Failed to generate group summary:', error);
+      alert('グループ要約の生成に失敗しました: ' + (error as Error).message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // 日時フォーマット
+  const formatDateTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
   };
 
   // モーダルを開く
@@ -123,19 +198,11 @@ export default function TagManagement(): JSX.Element {
       await api.tags.delete(tag.id);
       fetchTags();
       if (selectedTag?.id === tag.id) {
-        setSelectedTag(null);
-        setTagPapers([]);
+        navigate('/tags');
       }
     } catch (error) {
       alert('削除に失敗しました: ' + (error as Error).message);
     }
-  };
-
-  // 日付フォーマット
-  const formatDate = (dateString: string | null): string => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   };
 
   // タグ一覧表示
@@ -176,7 +243,7 @@ export default function TagManagement(): JSX.Element {
               <div
                 key={tag.id}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => fetchTagPapers(tag)}
+                onClick={() => navigate(`/tags/${tag.id}`)}
               >
                 <div className="flex items-start gap-3">
                   <div className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 ${tag.color}`} />
@@ -314,10 +381,7 @@ export default function TagManagement(): JSX.Element {
       {/* ヘッダー */}
       <div className="mb-6">
         <button
-          onClick={() => {
-            setSelectedTag(null);
-            setTagPapers([]);
-          }}
+          onClick={() => navigate('/tags')}
           className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -358,6 +422,98 @@ export default function TagManagement(): JSX.Element {
         </div>
       </div>
 
+      {/* グループ要約セクション */}
+      {tagPapers.length > 0 && (
+        <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 overflow-hidden">
+          {/* 要約ヘッダー */}
+          <div className="px-5 py-4 border-b border-indigo-200 bg-white/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                <h2 className="font-semibold text-gray-900">グループ要約</h2>
+                {latestSummary && (
+                  <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full">
+                    {latestSummary.paper_count}件の論文を分析
+                  </span>
+                )}
+              </div>
+              {latestSummary && (
+                <button
+                  onClick={() => setSummaryExpanded(!summaryExpanded)}
+                  className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                >
+                  {summaryExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 要約本文（展開時） */}
+          {latestSummary && summaryExpanded && (
+            <div className="p-5 border-b border-indigo-200">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
+                  {latestSummary.summary_text}
+                </pre>
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                  <span>
+                    観点: {latestSummary.perspective_prompt}
+                  </span>
+                  <span>
+                    {formatDateTime(latestSummary.created_at)} / {latestSummary.ai_provider}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 要約生成フォーム */}
+          <div className="p-5 bg-white/30">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  要約の観点
+                </label>
+                <textarea
+                  value={perspectivePrompt}
+                  onChange={(e) => setPerspectivePrompt(e.target.value)}
+                  placeholder="例: 教育工学の観点から、これらの論文が示唆する実践的な応用可能性について"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  rows={2}
+                  disabled={generating}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  ※ タグの説明と調査観点設定も自動的に考慮されます
+                </p>
+              </div>
+
+              <button
+                onClick={generateGroupSummary}
+                disabled={!perspectivePrompt.trim() || generating || tagPapers.length === 0}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    生成中...（最大30件の論文を分析）
+                  </>
+                ) : latestSummary ? (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    グループ要約を再生成
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    グループ要約を生成
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 論文一覧 */}
       {loadingPapers ? (
         <div className="flex items-center justify-center py-12">
@@ -371,72 +527,17 @@ export default function TagManagement(): JSX.Element {
       ) : (
         <div className="space-y-4">
           {tagPapers.map((paper) => (
-            <div
+            <PaperCard
               key={paper.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-all"
-            >
-              <div className="flex items-start gap-4">
-                <div className={`w-1.5 self-stretch rounded-full ${paper.journal_color}`} />
-                <div className="flex-1 min-w-0">
-                  {/* メタ情報 */}
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className={`px-2.5 py-1 text-xs font-medium text-white rounded-lg ${paper.journal_color}`}>
-                      {paper.journal_name}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {formatDate(paper.published_date)}
-                    </span>
-                    {paper.has_summary && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        要約済
-                      </span>
-                    )}
-                  </div>
-
-                  {/* タイトル */}
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{paper.title}</h3>
-
-                  {/* 著者 */}
-                  <p className="text-sm text-gray-600 mb-3">
-                    {Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors}
-                  </p>
-
-                  {/* 他のタグ */}
-                  {paper.tags && paper.tags.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                      {paper.tags.map((t) => (
-                        <span
-                          key={t.id}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full ${t.color} text-white`}
-                        >
-                          <Tag className="w-3 h-3" />
-                          {t.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* アブストラクト */}
-                  {paper.abstract && (
-                    <p className="text-sm text-gray-700 line-clamp-3 mb-3">{paper.abstract}</p>
-                  )}
-
-                  {/* リンク */}
-                  {paper.url && (
-                    <a
-                      href={paper.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      論文を開く
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
+              paper={paper}
+              selectedProvider={selectedProvider}
+              onTagsChange={() => {
+                // タグが変更されたら論文一覧を再取得
+                if (selectedTag) {
+                  fetchTagPapers(selectedTag.id);
+                }
+              }}
+            />
           ))}
         </div>
       )}
@@ -512,7 +613,7 @@ export default function TagManagement(): JSX.Element {
                   await handleSave();
                   // 更新後にタグ情報を再取得
                   if (selectedTag) {
-                    fetchTagPapers({ ...selectedTag, ...formData });
+                    fetchTagPapers(selectedTag.id);
                   }
                 }}
                 disabled={!formData.name.trim() || saving}

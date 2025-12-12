@@ -24,6 +24,7 @@ class User extends Model
         'preferred_ai_provider',
         'preferred_openai_model',
         'preferred_claude_model',
+        'research_perspective',
     ];
 
     protected $hidden = [
@@ -36,6 +37,7 @@ class User extends Model
         'is_admin' => 'boolean',
         'is_active' => 'boolean',
         'last_login_at' => 'datetime',
+        'research_perspective' => 'array',
     ];
 
     public function sessions(): HasMany

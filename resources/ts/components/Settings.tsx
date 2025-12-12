@@ -1,7 +1,7 @@
 import { useState, useEffect, ChangeEvent, useMemo } from 'react';
-import { Eye, EyeOff, Save, Trash2, Loader2, CheckCircle, AlertCircle, Bell, BellOff } from 'lucide-react';
+import { Eye, EyeOff, Save, Trash2, Loader2, CheckCircle, AlertCircle, Bell, BellOff, User } from 'lucide-react';
 import api from '../api';
-import type { ApiSettings, AIProvider } from '../types';
+import type { ApiSettings, AIProvider, Profile } from '../types';
 
 // Convert base64 string to Uint8Array for applicationServerKey
 function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
@@ -28,6 +28,12 @@ export default function Settings(): JSX.Element {
   const [savingOpenai, setSavingOpenai] = useState(false);
   const [savingClaude, setSavingClaude] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Profile state
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   // Form state
   const [claudeApiKey, setClaudeApiKey] = useState('');
@@ -56,15 +62,21 @@ export default function Settings(): JSX.Element {
     return provider?.models || ['claude-sonnet-4-20250514'];
   }, [settings?.available_providers]);
 
-  // Fetch current settings
+  // Fetch current settings and profile
   useEffect(() => {
     async function fetchSettings(): Promise<void> {
       try {
-        const data = await api.settings.getApi();
-        setSettings(data);
-        setPreferredProvider(data.preferred_ai_provider || 'openai');
-        setPreferredOpenaiModel(data.preferred_openai_model || 'gpt-4o');
-        setPreferredClaudeModel(data.preferred_claude_model || 'claude-sonnet-4-20250514');
+        const [apiData, profileData] = await Promise.all([
+          api.settings.getApi(),
+          api.settings.getProfile(),
+        ]);
+        setSettings(apiData);
+        setPreferredProvider(apiData.preferred_ai_provider || 'openai');
+        setPreferredOpenaiModel(apiData.preferred_openai_model || 'gpt-4o');
+        setPreferredClaudeModel(apiData.preferred_claude_model || 'claude-sonnet-4-20250514');
+        setProfile(profileData.profile);
+        setEditUsername(profileData.profile.username);
+        setEditEmail(profileData.profile.email || '');
       } catch (error) {
         setMessage({ type: 'error', text: '設定の取得に失敗しました' });
       } finally {
@@ -184,6 +196,32 @@ export default function Settings(): JSX.Element {
       setMessage({ type: 'error', text: (error as Error).message || '保存に失敗しました' });
     } finally {
       setSavingPreferences(false);
+    }
+  };
+
+  // Save Profile
+  const handleSaveProfile = async (): Promise<void> => {
+    if (!editUsername.trim()) {
+      setMessage({ type: 'error', text: '表示名を入力してください' });
+      return;
+    }
+
+    setSavingProfile(true);
+    setMessage(null);
+
+    try {
+      const result = await api.settings.updateProfile({
+        username: editUsername.trim(),
+        email: editEmail.trim() || null,
+      });
+      setProfile(result.profile);
+      setEditUsername(result.profile.username);
+      setEditEmail(result.profile.email || '');
+      setMessage({ type: 'success', text: result.message });
+    } catch (error) {
+      setMessage({ type: 'error', text: (error as Error).message || '保存に失敗しました' });
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -314,6 +352,73 @@ export default function Settings(): JSX.Element {
           {message.text}
         </div>
       )}
+
+      {/* Profile */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <User className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-lg font-semibold text-gray-900">プロフィール</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          表示名とメールアドレスを変更できます
+        </p>
+
+        {profile && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600">
+              ログインID: <code className="font-mono">{profile.user_id}</code>
+              <span className="text-gray-400 ml-2">(変更不可)</span>
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Username */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              表示名
+            </label>
+            <input
+              type="text"
+              value={editUsername}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setEditUsername(e.target.value)}
+              placeholder="表示名を入力"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              メールアドレス
+            </label>
+            <input
+              type="email"
+              value={editEmail}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setEditEmail(e.target.value)}
+              placeholder="example@example.com"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          {/* Save button */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleSaveProfile}
+              disabled={savingProfile || !editUsername.trim()}
+              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {savingProfile ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              プロフィールを保存
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* OpenAI API Key */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">

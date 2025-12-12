@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag
+  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag, Compass, Home
 } from 'lucide-react';
 import { getBasePath } from '../api';
 import type { User } from '../types';
+import ResearchPerspectiveModal from './ResearchPerspectiveModal';
 
 type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags';
 
@@ -26,6 +27,7 @@ export default function Header({
 }: HeaderProps): JSX.Element {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [perspectiveModalOpen, setPerspectiveModalOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close user menu when clicking outside
@@ -56,6 +58,18 @@ export default function Header({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={() => onNavigate('papers')}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                currentPage === 'papers'
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Home className="w-4 h-4" />
+              Home
+            </button>
+
             <button
               onClick={() => onNavigate('trends')}
               className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
@@ -125,6 +139,16 @@ export default function Header({
                   </button>
                   <button
                     onClick={() => {
+                      setPerspectiveModalOpen(true);
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-gray-50 text-gray-700 transition-colors"
+                  >
+                    <Compass className="w-4 h-4" />
+                    調査観点設定
+                  </button>
+                  <button
+                    onClick={() => {
                       onNavigate('settings');
                       setUserMenuOpen(false);
                     }}
@@ -135,7 +159,7 @@ export default function Header({
                     }`}
                   >
                     <Key className="w-4 h-4" />
-                    API設定
+                    設定
                   </button>
                   <div className="border-t border-gray-100 my-1" />
                   <button
@@ -178,6 +202,18 @@ export default function Header({
           <div className="md:hidden mt-4 pt-4 border-t border-gray-200">
             <div className="space-y-2">
               <button
+                onClick={() => handleNavigate('papers')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentPage === 'papers'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <Home className="w-5 h-5" />
+                Home
+              </button>
+
+              <button
                 onClick={() => handleNavigate('trends')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'trends'
@@ -202,18 +238,6 @@ export default function Header({
               </button>
 
               <button
-                onClick={() => handleNavigate('settings')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  currentPage === 'settings'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <Key className="w-5 h-5" />
-                API設定
-              </button>
-
-              <button
                 onClick={() => handleNavigate('journals')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   currentPage === 'journals'
@@ -223,6 +247,29 @@ export default function Header({
               >
                 <SettingsIcon className="w-5 h-5" />
                 論文誌管理
+              </button>
+
+              <button
+                onClick={() => {
+                  setPerspectiveModalOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-gray-50"
+              >
+                <Compass className="w-5 h-5" />
+                調査観点設定
+              </button>
+
+              <button
+                onClick={() => handleNavigate('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentPage === 'settings'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <Key className="w-5 h-5" />
+                設定
               </button>
 
               <div className="border-t border-gray-200 pt-2 mt-2">
@@ -249,6 +296,12 @@ export default function Header({
           </div>
         )}
       </div>
+
+      {/* Research Perspective Modal */}
+      <ResearchPerspectiveModal
+        isOpen={perspectiveModalOpen}
+        onClose={() => setPerspectiveModalOpen(false)}
+      />
     </header>
   );
 }

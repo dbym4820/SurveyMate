@@ -14,9 +14,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
   const isEdit = !!journal;
 
   const [formData, setFormData] = useState<JournalFormData>({
-    id: journal?.id || '',
     name: journal?.name || '',
-    full_name: journal?.full_name || '',
     rssUrl: journal?.rss_url || '',
     color: journal?.color || 'bg-blue-500',
   });
@@ -58,8 +56,8 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
   const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
 
-    if (!formData.id || !formData.name || !formData.rssUrl) {
-      setError('ID，論文誌名，RSS URLは必須です');
+    if (!formData.name || !formData.rssUrl) {
+      setError('論文誌名とRSS URLは必須です');
       return;
     }
 
@@ -117,52 +115,19 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
             </div>
           )}
 
-          {/* ID */}
+          {/* 論文誌名 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              ID <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.id}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                handleChange('id', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
-              }
-              disabled={isEdit}
-              placeholder="例: ijaied"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
-            <p className="text-xs text-gray-500 mt-1">英小文字・数字・ハイフンのみ</p>
-          </div>
-
-          {/* 略称 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              略称 <span className="text-red-500">*</span>
+              論文誌名 <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('name', e.target.value)}
-              placeholder="例: IJAIED"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">論文誌の略称または短い名前</p>
-          </div>
-
-          {/* 正式名称 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              正式名称
-            </label>
-            <input
-              type="text"
-              value={formData.full_name || ''}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('full_name', e.target.value)}
               placeholder="例: International Journal of Artificial Intelligence in Education"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
-            <p className="text-xs text-gray-500 mt-1">論文一覧に表示される名称（空の場合は略称が表示されます）</p>
+            <p className="text-xs text-gray-500 mt-1">論文誌の正式名称（IDは自動生成されます）</p>
           </div>
 
           {/* RSS URL */}

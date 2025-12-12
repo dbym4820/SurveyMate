@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, Sparkles, ChevronUp, Loader2, Tag, Plus, X } from 'lucide-react';
+import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText } from 'lucide-react';
 import api from '../api';
-import type { Paper, Summary, Tag as TagType } from '../types';
+import type { Paper, Summary, Tag as TagType, ChatMessage } from '../types';
 
 interface PaperCardProps {
   paper: Paper;
@@ -27,6 +27,24 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
+
+  // チャット関連state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatFloating, setChatFloating] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatFetching, setChatFetching] = useState(false);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const chatFloatingMessagesRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+
+  // 本文表示関連state
+  const [fullTextOpen, setFullTextOpen] = useState(false);
+  const [fullText, setFullText] = useState<string | null>(null);
+  const [fullTextLoading, setFullTextLoading] = useState(false);
+  const [fullTextSource, setFullTextSource] = useState<string | null>(null);
 
   // 外側クリックでドロップダウンを閉じる
   useEffect(() => {
@@ -164,6 +182,173 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
 
   // アブストラクトが長いかどうかを判定（約150文字以上）
   const isAbstractLong = paper.abstract && paper.abstract.length > 150;
+
+  // チャットメッセージ取得
+  const fetchChatMessages = useCallback(async (summaryId: number): Promise<void> => {
+    setChatFetching(true);
+    try {
+      const data = await api.summaries.chat.getMessages(summaryId);
+      if (data.success) {
+        setChatMessages(data.messages);
+      }
+    } catch (error) {
+      console.error('Failed to fetch chat messages:', error);
+    } finally {
+      setChatFetching(false);
+    }
+  }, []);
+
+  // チャットを開いたときにメッセージを取得
+  useEffect(() => {
+    if (chatOpen && summary) {
+      fetchChatMessages(summary.id);
+    }
+  }, [chatOpen, summary, fetchChatMessages]);
+
+  // チャットメッセージ送信
+  const sendChatMessage = async (): Promise<void> => {
+    if (!chatInput.trim() || !summary || chatLoading) return;
+
+    const message = chatInput.trim();
+    setChatInput('');
+
+    // ユーザーメッセージを即座に表示（仮ID使用）
+    const tempUserMessage: ChatMessage = {
+      id: Date.now(),
+      role: 'user',
+      content: message,
+      created_at: new Date().toISOString(),
+    };
+    setChatMessages((prev) => [...prev, tempUserMessage]);
+    setChatLoading(true);
+
+    try {
+      const data = await api.summaries.chat.send(summary.id, message);
+      if (data.success) {
+        // 仮のユーザーメッセージを正式なものに置き換え、AI応答を追加
+        setChatMessages((prev) => [
+          ...prev.filter((msg) => msg.id !== tempUserMessage.id),
+          data.user_message,
+          data.ai_message,
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to send chat message:', error);
+      alert('メッセージの送信に失敗しました: ' + (error as Error).message);
+      // 失敗時は仮メッセージを削除し、入力を復元
+      setChatMessages((prev) => prev.filter((msg) => msg.id !== tempUserMessage.id));
+      setChatInput(message);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // チャット履歴クリア
+  const clearChat = async (): Promise<void> => {
+    if (!summary || !confirm('チャット履歴をクリアしますか？')) return;
+
+    try {
+      const data = await api.summaries.chat.clear(summary.id);
+      if (data.success) {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to clear chat:', error);
+    }
+  };
+
+  // チャットメッセージ追加時にコンテナ内のみスクロール（ページ全体は動かさない）
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+    if (chatFloatingMessagesRef.current) {
+      chatFloatingMessagesRef.current.scrollTop = chatFloatingMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  // フローティングウィンドウを開く
+  const openFloatingChat = (): void => {
+    setChatFloating(true);
+    // フローティング時はbodyのスクロールを無効化
+    document.body.style.overflow = 'hidden';
+  };
+
+  // フローティングウィンドウを閉じる
+  const closeFloatingChat = (): void => {
+    setChatFloating(false);
+    document.body.style.overflow = '';
+  };
+
+  // ESCキーでフローティングを閉じる
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && chatFloating) {
+        closeFloatingChat();
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [chatFloating]);
+
+  // テキストエリアの高さ自動調整
+  const handleChatInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    setChatInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+  };
+
+  // チャットを開く/閉じる（開くときは要約の先頭にスクロール）
+  const toggleChat = (): void => {
+    const willOpen = !chatOpen;
+    setChatOpen(willOpen);
+    if (willOpen && summaryRef.current) {
+      setTimeout(() => {
+        summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  };
+
+  // 本文を取得して表示
+  const openFullText = async (): Promise<void> => {
+    if (fullText) {
+      setFullTextOpen(true);
+      document.body.style.overflow = 'hidden';
+      return;
+    }
+
+    setFullTextLoading(true);
+    try {
+      const data = await api.papers.getFullText(paper.id);
+      if (data.success) {
+        setFullText(data.full_text);
+        setFullTextSource(data.full_text_source);
+        setFullTextOpen(true);
+        document.body.style.overflow = 'hidden';
+      }
+    } catch (error) {
+      alert('本文の取得に失敗しました: ' + (error as Error).message);
+    } finally {
+      setFullTextLoading(false);
+    }
+  };
+
+  // 本文モーダルを閉じる
+  const closeFullText = (): void => {
+    setFullTextOpen(false);
+    document.body.style.overflow = '';
+  };
+
+  // ESCキーで本文モーダルを閉じる
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && fullTextOpen) {
+        closeFullText();
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [fullTextOpen]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all">
@@ -324,15 +509,35 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
             {/* アブストラクト */}
             {paper.abstract && (
               <div className="mb-4">
-                <p className={`text-xs sm:text-sm text-gray-700 ${!abstractExpanded && isAbstractLong ? 'line-clamp-3' : ''}`}>
-                  {paper.abstract}
-                </p>
+                <div className="relative">
+                  <div
+                    className={`text-xs sm:text-sm text-gray-700 overflow-hidden transition-all duration-300 ease-in-out ${
+                      !abstractExpanded && isAbstractLong ? 'max-h-[4.5em]' : 'max-h-[1000px]'
+                    }`}
+                  >
+                    <p>{paper.abstract}</p>
+                  </div>
+                  {/* グラデーションオーバーレイ */}
+                  {!abstractExpanded && isAbstractLong && (
+                    <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                  )}
+                </div>
                 {isAbstractLong && (
                   <button
                     onClick={() => setAbstractExpanded(!abstractExpanded)}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 mt-1 font-medium"
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 mt-2 font-medium transition-colors"
                   >
-                    {abstractExpanded ? '概要を折りたたむ' : '概要を全文表示'}
+                    {abstractExpanded ? (
+                      <>
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        概要を折りたたむ
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                        概要を全文表示
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -369,6 +574,23 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
                 </button>
               )}
 
+              {/* 本文表示ボタン（本文がある場合のみ） */}
+              {paper.has_full_text && (
+                <button
+                  onClick={openFullText}
+                  disabled={fullTextLoading}
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                >
+                  {fullTextLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  )}
+                  <span className="hidden sm:inline">本文を表示</span>
+                  <span className="sm:hidden">本文</span>
+                </button>
+              )}
+
               <a
                 href={paper.url || '#'}
                 target="_blank"
@@ -383,7 +605,7 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
 
             {/* AI要約 */}
             {summary && expanded && (
-              <div className="mt-3 sm:mt-4 p-3 sm:p-5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+              <div ref={summaryRef} className="mt-3 sm:mt-4 p-3 sm:p-5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
@@ -429,11 +651,313 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
                     <p className="whitespace-pre-wrap">{summary.summary_text}</p>
                   )}
                 </div>
+
+                {/* チャットトグルボタン */}
+                <div className="mt-4 pt-3 border-t border-indigo-200">
+                  <button
+                    onClick={toggleChat}
+                    className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {chatOpen ? 'チャットを閉じる' : 'この要約について質問する'}
+                    {chatMessages.length > 0 && !chatOpen && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-200 text-indigo-700 rounded-full">
+                        {chatMessages.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* チャットパネル */}
+                {chatOpen && (
+                  <div className="mt-3 bg-white rounded-lg border border-indigo-200 overflow-hidden">
+                    {/* チャットヘッダー */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border-b border-indigo-200">
+                      <span className="text-xs font-medium text-indigo-700">
+                        AIとの会話
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={openFloatingChat}
+                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+                          title="拡大表示"
+                        >
+                          <Maximize2 className="w-3 h-3" />
+                        </button>
+                        {chatMessages.length > 0 && (
+                          <button
+                            onClick={clearChat}
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors"
+                            title="履歴をクリア"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* メッセージ表示エリア */}
+                    <div ref={chatMessagesRef} className="max-h-64 overflow-y-auto p-3 space-y-3">
+                      {chatFetching ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                        </div>
+                      ) : chatMessages.length === 0 ? (
+                        <div className="text-center py-4 text-xs text-gray-500">
+                          要約について質問や追加の説明をリクエストできます
+                        </div>
+                      ) : (
+                        chatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[85%] px-3 py-2 rounded-lg text-xs ${
+                                msg.role === 'user'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap">{msg.content}</p>
+                              {msg.role === 'assistant' && msg.ai_model && (
+                                <p className="mt-1 text-[10px] opacity-60">
+                                  {msg.ai_provider} / {msg.ai_model}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {chatLoading && (
+                        <div className="flex justify-start">
+                          <div className="bg-gray-100 px-3 py-2 rounded-lg">
+                            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 入力エリア */}
+                    <div className="border-t border-indigo-200 p-2">
+                      <div className="flex gap-2">
+                        <textarea
+                          ref={chatInputRef}
+                          value={chatInput}
+                          onChange={handleChatInputChange}
+                          onKeyDown={(e) => {
+                            // IME入力中は無視
+                            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                            // Cmd+Enter (Mac) または Ctrl+Enter で送信
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              sendChatMessage();
+                            }
+                          }}
+                          placeholder="質問を入力... (⌘+Enterで送信)"
+                          className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-lg resize-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                          rows={1}
+                          disabled={chatLoading}
+                        />
+                        <button
+                          onClick={sendChatMessage}
+                          disabled={!chatInput.trim() || chatLoading}
+                          className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {chatLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* フローティングチャットモーダル */}
+      {chatFloating && summary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeFloatingChat}>
+          <div
+            className="w-full max-w-2xl h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* モーダルヘッダー */}
+            <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+              <div className="flex-1 min-w-0 mr-4">
+                <h3 className="font-medium text-sm truncate">{paper.title}</h3>
+                <p className="text-xs text-white/80 truncate">AIとの会話</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {chatMessages.length > 0 && (
+                  <button
+                    onClick={clearChat}
+                    className="p-1.5 hover:bg-white/20 rounded transition-colors"
+                    title="履歴をクリア"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={closeFloatingChat}
+                  className="p-1.5 hover:bg-white/20 rounded transition-colors"
+                  title="縮小 (ESC)"
+                >
+                  <Minimize2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* メッセージ表示エリア */}
+            <div ref={chatFloatingMessagesRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+              {chatFetching ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                </div>
+              ) : chatMessages.length === 0 ? (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>要約について質問や追加の説明をリクエストできます</p>
+                  <p className="text-xs mt-1 text-gray-400">例: 「この研究の限界は？」「実務への応用は？」</p>
+                </div>
+              ) : (
+                chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm ${
+                        msg.role === 'user'
+                          ? 'bg-indigo-600 text-white rounded-br-md'
+                          : 'bg-white text-gray-800 shadow-sm border border-gray-200 rounded-bl-md'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {msg.role === 'assistant' && msg.ai_model && (
+                        <p className="mt-2 text-xs text-gray-400">
+                          {msg.ai_provider} / {msg.ai_model}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                      <span className="text-sm text-gray-500">考え中...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 入力エリア */}
+            <div className="border-t border-gray-200 p-4 bg-white">
+              <div className="flex gap-3">
+                <textarea
+                  value={chatInput}
+                  onChange={handleChatInputChange}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      sendChatMessage();
+                    }
+                  }}
+                  placeholder="質問を入力... (⌘+Enterで送信)"
+                  className="flex-1 px-4 py-3 text-sm border border-gray-300 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  rows={2}
+                  disabled={chatLoading}
+                  autoFocus
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors self-end"
+                >
+                  {chatLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400 text-center">
+                ESCで閉じる
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 本文表示モーダル */}
+      {fullTextOpen && fullText && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeFullText}>
+          <div
+            className="w-full max-w-4xl h-[90vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* モーダルヘッダー */}
+            <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+              <div className="flex-1 min-w-0 mr-4">
+                <h3 className="font-medium text-sm truncate">{paper.title}</h3>
+                <div className="flex items-center gap-2 text-xs text-white/80">
+                  <FileText className="w-3 h-3" />
+                  <span>
+                    論文本文
+                    {fullTextSource && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">
+                        {fullTextSource === 'unpaywall_pdf' ? 'PDF' : fullTextSource === 'html_scrape' ? 'HTML' : fullTextSource}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={closeFullText}
+                className="p-1.5 hover:bg-white/20 rounded transition-colors"
+                title="閉じる (ESC)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 本文表示エリア */}
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
+                <p className="text-sm sm:text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {fullText}
+                </p>
+              </div>
+            </div>
+
+            {/* フッター */}
+            <div className="border-t border-gray-200 px-4 py-3 bg-white flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                ESCで閉じる
+              </p>
+              <a
+                href={paper.url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                元の論文を開く
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
