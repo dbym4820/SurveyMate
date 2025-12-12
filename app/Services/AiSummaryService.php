@@ -155,7 +155,9 @@ PROMPT;
   "implications": "教育への示唆・実践的意義（1文）"
 }
 
-重要: JSON形式のみで回答し，他のテキストは含めないでください．
+重要:
+- JSON形式のみで回答し，他のテキストは含めないでください．
+- 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
 PROMPT;
 
         return $prompt;
@@ -287,7 +289,7 @@ PROMPT;
             'model' => $model,
             'temperature' => 0.3,
             'messages' => [
-                ['role' => 'system', 'content' => 'You are an academic paper summarization assistant. Always respond in valid JSON format.'],
+                ['role' => 'system', 'content' => 'You are an academic paper summarization assistant. Always respond in valid JSON format. When writing in Japanese, always use「，」(comma) and「．」(period) for punctuation. Never use「、」or「。」.'],
                 ['role' => 'user', 'content' => $prompt],
             ],
         ];
@@ -411,7 +413,7 @@ PROMPT;
             'model' => $model,
             'temperature' => 0.3,
             'messages' => [
-                ['role' => 'system', 'content' => 'You are an academic research trend analysis assistant. Always respond in valid JSON format.'],
+                ['role' => 'system', 'content' => 'You are an academic research trend analysis assistant. Always respond in valid JSON format. When writing in Japanese, always use「，」(comma) and「．」(period) for punctuation. Never use「、」or「。」.'],
                 ['role' => 'user', 'content' => $prompt],
             ],
         ];
@@ -544,6 +546,8 @@ PROMPT;
 {$implications}
 
 上記の情報に基づいて，ユーザーの質問に簡潔かつ正確に回答してください．論文の内容を超える推測は避け，わからない場合はその旨を伝えてください．
+
+重要: 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
 CONTEXT;
     }
 
@@ -772,7 +776,9 @@ TAG_DESC;
   "perspective_analysis": "指定された観点からの分析（3〜5文）"
 }
 
-重要: JSON形式のみで回答し，他のテキストは含めないでください．
+重要:
+- JSON形式のみで回答し，他のテキストは含めないでください．
+- 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
 PROMPT;
 
         return $prompt;
@@ -852,7 +858,7 @@ PROMPT;
             'model' => $model,
             'temperature' => 0.3,
             'messages' => [
-                ['role' => 'system', 'content' => 'You are an academic research analysis assistant. Always respond in valid JSON format.'],
+                ['role' => 'system', 'content' => 'You are an academic research analysis assistant. Always respond in valid JSON format. When writing in Japanese, always use「，」(comma) and「．」(period) for punctuation. Never use「、」or「。」.'],
                 ['role' => 'user', 'content' => $prompt],
             ],
         ];
