@@ -19,15 +19,17 @@ jobs:
               key: ${{ secrets.DEPLOY_KEY }}
               script: |
 
-                # nvm を読み込んで Node 22 を使う
+                # nvm を読み込んで Node を使う
                 export NVM_DIR="$HOME/.nvm"
                 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                nvm use 25
+                nvm use 22
 
                 cd ${{ secrets.DEPLOY_DIR }}
-                git pull origin main
 
+                # ローカルの変更を破棄してリモートを優先
+                git fetch origin
+                git reset --hard origin/main
+                git clean -fd
+
+                # セットアップ実行
                 sh setup.sh
-
-                git add .
-                git commit -m "tmp update"
