@@ -275,29 +275,8 @@ if [ "$DB_CONNECTION" = "mysql" ]; then
         DB_EXISTS=$($MYSQL_CMD -N -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$DB_DATABASE'" 2>/dev/null || echo "")
 
         if [ -n "$DB_EXISTS" ]; then
-            echo ""
-            echo -e "  ${YELLOW}Warning: Database '$DB_DATABASE' already exists.${NC}"
-            echo -e "  ${RED}All existing data will be deleted!${NC}"
-            echo ""
-            read -p "  Do you want to DROP and recreate the database? [y/N]: " CONFIRM
-            echo ""
-
-            if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
-                echo "  Dropping existing database '$DB_DATABASE'..."
-                $MYSQL_CMD -e "DROP DATABASE \`$DB_DATABASE\`;" 2>/dev/null
-                if [ $? -eq 0 ]; then
-                    echo "  Database dropped: OK"
-                else
-                    echo "  Failed to drop database."
-                    exit 1
-                fi
-                DB_EXISTS=""
-            else
-                echo "  Keeping existing database."
-            fi
-        fi
-
-        if [ -z "$DB_EXISTS" ]; then
+            echo "  Database '$DB_DATABASE' already exists. Using existing database."
+        else
             echo "  Creating database '$DB_DATABASE'..."
             $MYSQL_CMD -e "CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
             if [ $? -eq 0 ]; then
