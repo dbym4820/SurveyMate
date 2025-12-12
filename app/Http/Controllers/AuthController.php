@@ -75,49 +75,62 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|string|min:3|max:50|regex:/^[a-zA-Z0-9_-]+$/|unique:users,user_id',
-            'username' => 'required|string|min:1|max:100',  // 表示名は重複可
-            'password' => 'required|string|min:6',
-            'email' => 'nullable|email|max:255',
-        ], [
-            'user_id.regex' => 'ユーザーIDは英数字，アンダースコア，ハイフンのみ使用できます',
-            'user_id.unique' => 'このユーザーIDは既に使用されています',
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|string|min:3|max:50|regex:/^[a-zA-Z0-9_-]+$/|unique:users,user_id',
+                'username' => 'required|string|min:1|max:100',  // 表示名は重複可
+                'password' => 'required|string|min:6',
+                'email' => 'nullable|email|max:255',
+            ], [
+                'user_id.regex' => 'ユーザーIDは英数字，アンダースコア，ハイフンのみ使用できます',
+                'user_id.unique' => 'このユーザーIDは既に使用されています',
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()->first()], 400);
+            if ($validator->fails()) {
+                return response()->json(['error' => $validator->errors()->first()], 400);
+            }
+
+            $user = User::create([
+                'user_id' => $request->user_id,
+                'username' => $request->username,
+                'password' => $request->password, // Will be hashed by mutator
+                'email' => $request->email,
+                'is_admin' => false,
+                'is_active' => true,
+            ]);
+
+            // デフォルト論文誌を作成（失敗してもユーザー登録は継続）
+            try {
+                $this->createDefaultJournals($user);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("デフォルト論文誌の作成に失敗: " . $e->getMessage());
+            }
+
+            // 自動ログイン: セッション作成
+            $user->update(['last_login_at' => now()]);
+            $sessionLifetime = config('session.lifetime', 1440) * 60;
+            $session = Session::createForUser($user, $sessionLifetime);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'ユーザーを作成しました',
+                'user' => [
+                    'id' => $user->id,
+                    'userId' => $user->user_id,
+                    'username' => $user->username,
+                    'email' => $user->email,
+                    'isAdmin' => $user->is_admin,
+                ],
+                'expiresAt' => now()->addSeconds($sessionLifetime)->toISOString(),
+            ], 201)->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("ユーザー登録エラー: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'error' => '登録処理中にエラーが発生しました: ' . $e->getMessage(),
+            ], 500);
         }
-
-        $user = User::create([
-            'user_id' => $request->user_id,
-            'username' => $request->username,
-            'password' => $request->password, // Will be hashed by mutator
-            'email' => $request->email,
-            'is_admin' => false,
-            'is_active' => true,
-        ]);
-
-        // デフォルト論文誌を作成
-        $this->createDefaultJournals($user);
-
-        // 自動ログイン: セッション作成
-        $user->update(['last_login_at' => now()]);
-        $sessionLifetime = config('session.lifetime', 1440) * 60;
-        $session = Session::createForUser($user, $sessionLifetime);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'ユーザーを作成しました',
-            'user' => [
-                'id' => $user->id,
-                'userId' => $user->user_id,
-                'username' => $user->username,
-                'email' => $user->email,
-                'isAdmin' => $user->is_admin,
-            ],
-            'expiresAt' => now()->addSeconds($sessionLifetime)->toISOString(),
-        ], 201)->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
     }
 
     public function me(Request $request): JsonResponse
