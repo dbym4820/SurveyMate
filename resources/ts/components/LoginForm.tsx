@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
-import { BookOpen, LogIn, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { LogIn, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { getBasePath } from '../api';
 import api from '../api';
 import type { User } from '../types';
 
@@ -110,9 +111,11 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 via-purple-50 to-pink-100 px-4 py-8">
       <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
-          <div className="p-2 sm:p-3 bg-gray-100 rounded-xl">
-            <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600" />
-          </div>
+          <img
+            src={`${getBasePath()}/favicon.ico`}
+            alt="SurveyMate"
+            className="w-10 h-10 sm:w-12 sm:h-12"
+          />
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">SurveyMate</h1>
           </div>
