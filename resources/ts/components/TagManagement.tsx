@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { AVAILABLE_COLORS } from '../constants';
-import type { Tag as TagType, Paper, TagSummary } from '../types';
+import { useToast } from './Toast';
+import type { Tag as TagType, Paper, TagSummary, ApiSettings } from '../types';
 import PaperCard from './PaperCard';
 
 interface TagFormData {
@@ -22,6 +23,7 @@ const initialFormData: TagFormData = {
 };
 
 export default function TagManagement(): JSX.Element {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { tagId } = useParams<{ tagId: string }>();
 
@@ -37,14 +39,14 @@ export default function TagManagement(): JSX.Element {
   const [tagPapers, setTagPapers] = useState<Paper[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(false);
 
-  // AI要約用のプロバイダー設定
-  const [selectedProvider, setSelectedProvider] = useState('openai');
-
   // グループ要約用
   const [latestSummary, setLatestSummary] = useState<TagSummary | null>(null);
   const [generating, setGenerating] = useState(false);
   const [perspectivePrompt, setPerspectivePrompt] = useState('');
   const [summaryExpanded, setSummaryExpanded] = useState(true);
+
+  // APIキー設定状態
+  const [settings, setSettings] = useState<ApiSettings | null>(null);
 
   // タグ一覧を取得
   const fetchTags = useCallback(async (): Promise<void> => {
@@ -61,24 +63,23 @@ export default function TagManagement(): JSX.Element {
     }
   }, []);
 
+  // Fetch settings (API key status)
+  const fetchSettings = useCallback(async (): Promise<void> => {
+    try {
+      const data = await api.settings.getApi();
+      setSettings(data);
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    }
+  }, []);
+
+  // APIキー設定有無
+  const hasAnyApiKey = settings?.claude_api_key_set || settings?.openai_api_key_set;
+
   useEffect(() => {
     fetchTags();
-  }, [fetchTags]);
-
-  // ユーザーのAIプロバイダー設定を取得
-  useEffect(() => {
-    const fetchProviderSettings = async (): Promise<void> => {
-      try {
-        const data = await api.settings.getApi();
-        if (data.preferred_ai_provider) {
-          setSelectedProvider(data.preferred_ai_provider);
-        }
-      } catch (error) {
-        console.error('Failed to fetch provider settings:', error);
-      }
-    };
-    fetchProviderSettings();
-  }, []);
+    fetchSettings();
+  }, [fetchTags, fetchSettings]);
 
   // タグの論文一覧を取得
   const fetchTagPapers = useCallback(async (tagIdToFetch: number): Promise<void> => {
@@ -119,7 +120,7 @@ export default function TagManagement(): JSX.Element {
   // グループ要約を生成
   const generateGroupSummary = async (): Promise<void> => {
     if (!selectedTag || !perspectivePrompt.trim()) {
-      alert('要約の観点を入力してください');
+      showToast('要約の観点を入力してください', 'info');
       return;
     }
 
@@ -129,10 +130,11 @@ export default function TagManagement(): JSX.Element {
       if (data.success) {
         setLatestSummary(data.summary);
         setSummaryExpanded(true);
+        showToast('グループ要約を生成しました', 'success');
       }
     } catch (error) {
       console.error('Failed to generate group summary:', error);
-      alert('グループ要約の生成に失敗しました: ' + (error as Error).message);
+      showToast('グループ要約の生成に失敗しました: ' + (error as Error).message, 'error');
     } finally {
       setGenerating(false);
     }
@@ -172,6 +174,7 @@ export default function TagManagement(): JSX.Element {
           color: formData.color,
           description: formData.description || undefined,
         });
+        showToast('Tagを更新しました', 'success');
       } else {
         await api.tags.create(formData.name, formData.color);
         // 新規作成後にdescriptionを更新
@@ -180,11 +183,12 @@ export default function TagManagement(): JSX.Element {
         if (newTag && formData.description) {
           await api.tags.update(newTag.id, { description: formData.description });
         }
+        showToast('Tagを作成しました', 'success');
       }
       setShowModal(false);
       fetchTags();
     } catch (error) {
-      alert('保存に失敗しました: ' + (error as Error).message);
+      showToast('保存に失敗しました: ' + (error as Error).message, 'error');
     } finally {
       setSaving(false);
     }
@@ -196,19 +200,20 @@ export default function TagManagement(): JSX.Element {
 
     try {
       await api.tags.delete(tag.id);
+      showToast('Tagを削除しました', 'success');
       fetchTags();
       if (selectedTag?.id === tag.id) {
         navigate('/tags');
       }
     } catch (error) {
-      alert('削除に失敗しました: ' + (error as Error).message);
+      showToast('削除に失敗しました: ' + (error as Error).message, 'error');
     }
   };
 
   // タグ一覧表示
   if (!selectedTag) {
     return (
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="w-[85%] mx-auto py-6">
         {/* ヘッダー */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -377,7 +382,7 @@ export default function TagManagement(): JSX.Element {
 
   // タグ詳細（論文一覧）表示
   return (
-    <main className="max-w-6xl mx-auto px-4 py-6">
+    <main className="w-[85%] mx-auto py-6">
       {/* ヘッダー */}
       <div className="mb-6">
         <button
@@ -422,8 +427,8 @@ export default function TagManagement(): JSX.Element {
         </div>
       </div>
 
-      {/* グループ要約セクション */}
-      {tagPapers.length > 0 && (
+      {/* グループ要約セクション（APIキー設定時のみ） */}
+      {hasAnyApiKey && tagPapers.length > 0 && (
         <div className="mb-6 bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl border border-gray-200 overflow-hidden">
           {/* 要約ヘッダー */}
           <div className="px-5 py-4 border-b border-gray-200 bg-white/50">
@@ -530,13 +535,13 @@ export default function TagManagement(): JSX.Element {
             <PaperCard
               key={paper.id}
               paper={paper}
-              selectedProvider={selectedProvider}
               onTagsChange={() => {
                 // タグが変更されたら論文一覧を再取得
                 if (selectedTag) {
                   fetchTagPapers(selectedTag.id);
                 }
               }}
+              hasAnyApiKey={hasAnyApiKey}
             />
           ))}
         </div>

@@ -4,7 +4,6 @@ import type {
   AuthMeResponse,
   JournalsResponse,
   PapersResponse,
-  ProvidersResponse,
   GenerateSummaryResponse,
   RssTestResult,
   FetchResult,
@@ -23,6 +22,10 @@ import type {
   ChatSendResponse,
   ResearchPerspectiveResponse,
   ResearchPerspectiveUpdateResponse,
+  SummaryTemplateResponse,
+  SummaryTemplateUpdateResponse,
+  PageTestResult,
+  RegenerateFeedResult,
 } from './types';
 
 // ベースパス（現在のURLから自動検出）
@@ -116,6 +119,13 @@ export const api = {
       request('/admin/journals/test-rss', { method: 'POST', body: JSON.stringify({ rssUrl }) }),
     fetch: (id: string): Promise<{ success: boolean; result: FetchResult }> =>
       request(`/admin/journals/${id}/fetch`),
+    fetchAll: (): Promise<{ success: boolean; message: string; summary: { total_new: number; total_fetched: number; error_count: number } }> =>
+      request('/admin/journals/fetch-all', { method: 'POST' }),
+    // AI生成RSS関連
+    testPage: (url: string): Promise<PageTestResult> =>
+      request('/admin/journals/test-page', { method: 'POST', body: JSON.stringify({ url }) }),
+    regenerateFeed: (journalId: string): Promise<RegenerateFeedResult> =>
+      request(`/admin/journals/${journalId}/regenerate-feed`, { method: 'POST' }),
   },
 
   // 論文
@@ -168,18 +178,16 @@ export const api = {
     // タグ要約
     getSummaries: (tagId: number): Promise<TagSummariesResponse> =>
       request(`/tags/${tagId}/summaries`),
-    generateSummary: (tagId: number, perspectivePrompt: string, provider?: string): Promise<TagSummaryResponse> =>
-      request(`/tags/${tagId}/summaries`, { method: 'POST', body: JSON.stringify({ perspective_prompt: perspectivePrompt, provider }) }),
+    generateSummary: (tagId: number, perspectivePrompt: string): Promise<TagSummaryResponse> =>
+      request(`/tags/${tagId}/summaries`, { method: 'POST', body: JSON.stringify({ perspective_prompt: perspectivePrompt }) }),
     deleteSummary: (tagId: number, summaryId: number): Promise<{ success: boolean; message: string }> =>
       request(`/tags/${tagId}/summaries/${summaryId}`, { method: 'DELETE' }),
   },
 
   // AI要約
   summaries: {
-    providers: (): Promise<ProvidersResponse> =>
-      request('/summaries/providers'),
-    generate: (paperId: number, provider?: string): Promise<GenerateSummaryResponse> =>
-      request('/summaries/generate', { method: 'POST', body: JSON.stringify({ paperId, provider }) }),
+    generate: (paperId: number): Promise<GenerateSummaryResponse> =>
+      request('/summaries/generate', { method: 'POST', body: JSON.stringify({ paperId }) }),
     // チャット（要約についての会話）
     chat: {
       getMessages: (summaryId: number): Promise<ChatMessagesResponse> =>
@@ -226,6 +234,28 @@ export const api = {
       reading_focus?: string;
     }): Promise<ResearchPerspectiveUpdateResponse> =>
       request('/settings/research-perspective', { method: 'PUT', body: JSON.stringify(data) }),
+    // 要約テンプレート設定
+    getSummaryTemplate: (): Promise<SummaryTemplateResponse> =>
+      request('/settings/summary-template'),
+    updateSummaryTemplate: (data: {
+      summary_template?: string;
+    }): Promise<SummaryTemplateUpdateResponse> =>
+      request('/settings/summary-template', { method: 'PUT', body: JSON.stringify(data) }),
+    // 初期設定
+    completeInitialSetup: (data: {
+      claude_api_key?: string;
+      openai_api_key?: string;
+      preferred_ai_provider?: string;
+      preferred_openai_model?: string;
+      preferred_claude_model?: string;
+      research_fields?: string;
+      summary_perspective?: string;
+      reading_focus?: string;
+      summary_template?: string;
+    }): Promise<{ success: boolean; message: string }> =>
+      request('/settings/initial-setup/complete', { method: 'POST', body: JSON.stringify(data) }),
+    skipInitialSetup: (): Promise<{ success: boolean; message: string }> =>
+      request('/settings/initial-setup/skip', { method: 'POST' }),
   },
 
   // プッシュ通知

@@ -46,12 +46,16 @@ return [
         // OpenAI
         'openai_api_key' => env('OPENAI_API_KEY'),
         'openai_default_model' => env('OPENAI_DEFAULT_MODEL', 'gpt-4o'),
-        'openai_available_models' => env('OPENAI_AVAILABLE_MODELS', 'gpt-4o,gpt-4o-mini,gpt-4-turbo,gpt-3.5-turbo'),
+        'openai_available_models' => env('OPENAI_AVAILABLE_MODELS', 'gpt-4o,gpt-4o-mini,o3-mini,o1-mini,gpt-4-turbo,gpt-3.5-turbo'),
 
         // Claude (Anthropic)
         'claude_api_key' => env('CLAUDE_API_KEY'),
         'claude_default_model' => env('CLAUDE_DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
         'claude_available_models' => env('CLAUDE_AVAILABLE_MODELS', 'claude-sonnet-4-20250514,claude-opus-4-20250514,claude-3-5-haiku-20241022'),
+
+        // Admin API keys (fallback when user has no API key)
+        'admin_claude_api_key' => env('ADMIN_CLAUDE_API_KEY'),
+        'admin_openai_api_key' => env('ADMIN_OPENAI_API_KEY'),
     ],
 
     /*

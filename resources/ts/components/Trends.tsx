@@ -1,10 +1,10 @@
-import { useState, useEffect, ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import {
   TrendingUp, Calendar, FileText, Sparkles, Loader2,
   ChevronDown, ChevronUp, Clock, Target, Lightbulb
 } from 'lucide-react';
 import api, { getBasePath } from '../api';
-import type { AIProvider } from '../types';
+import type { ApiSettings } from '../types';
 
 interface TrendStats {
   [period: string]: {
@@ -58,14 +58,23 @@ export default function Trends(): JSX.Element {
   const [showPapers, setShowPapers] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // AI Provider
-  const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState('claude');
+  // APIキー設定状態
+  const [settings, setSettings] = useState<ApiSettings | null>(null);
+  const hasAnyApiKey = settings?.claude_api_key_set || settings?.openai_api_key_set;
 
   useEffect(() => {
     fetchStats();
-    fetchProviders();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const data = await api.settings.getApi();
+      setSettings(data);
+    } catch (err) {
+      console.error('Failed to fetch settings:', err);
+    }
+  };
 
   useEffect(() => {
     if (selectedPeriod) {
@@ -73,18 +82,6 @@ export default function Trends(): JSX.Element {
       fetchSummary(selectedPeriod);
     }
   }, [selectedPeriod]);
-
-  const fetchProviders = async () => {
-    try {
-      const data = await api.summaries.providers();
-      if (data.success) {
-        setAiProviders(data.providers);
-        setSelectedProvider(data.current);
-      }
-    } catch (err) {
-      console.error('Failed to fetch providers:', err);
-    }
-  };
 
   const fetchStats = async () => {
     try {
@@ -152,7 +149,6 @@ export default function Trends(): JSX.Element {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ provider: selectedProvider }),
       });
       const data = await response.json();
       if (data.success && data.summary) {
@@ -171,7 +167,7 @@ export default function Trends(): JSX.Element {
   const currentStats = stats?.[selectedPeriod];
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-6">
+    <main className="w-[85%] mx-auto py-6">
         {/* Page Title */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900">トレンド分析</h2>
@@ -238,42 +234,28 @@ export default function Trends(): JSX.Element {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {/* AI Provider Selection */}
-                {aiProviders.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-gray-500" />
-                    <select
-                      value={selectedProvider}
-                      onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-                    >
-                      {aiProviders.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <button
-                  onClick={generateSummary}
-                  disabled={isGenerating || papers.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      {summary ? '再生成' : '生成する'}
-                    </>
-                  )}
-                </button>
-              </div>
+              {/* 生成ボタン（APIキー設定時のみ） */}
+              {hasAnyApiKey && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={generateSummary}
+                    disabled={isGenerating || papers.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        {summary ? '再生成' : '生成する'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -374,12 +356,17 @@ export default function Trends(): JSX.Element {
           ) : (
             <div className="p-12 text-center">
               <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">
-                「生成する」ボタンを押してAIによるトレンド要約を生成してください
-              </p>
-              <p className="text-sm text-gray-400">
-                ※要約生成にはAPIキーの設定が必要です
-              </p>
+              {hasAnyApiKey ? (
+                <>
+                  <p className="text-gray-500 mb-4">
+                    「生成する」ボタンを押してAIによるトレンド要約を生成してください
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-500 mb-4">
+                  トレンド要約を生成するには，設定画面でAPIキーを設定してください
+                </p>
+              )}
             </div>
           )}
         </div>

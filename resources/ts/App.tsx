@@ -8,10 +8,14 @@ import PaperList from './components/PaperList';
 import JournalManagement from './components/JournalManagement';
 import TagManagement from './components/TagManagement';
 import Settings from './components/Settings';
+import ResearchSettings from './components/ResearchSettings';
+import ApiSettings from './components/ApiSettings';
 import Trends from './components/Trends';
+import InitialSetup from './components/InitialSetup';
+import { ToastProvider } from './components/Toast';
 import type { User } from './types';
 
-type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags';
+type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags' | 'research' | 'apisettings';
 
 // ルートとページタイプのマッピング
 const routeToPage: Record<string, PageType> = {
@@ -20,7 +24,8 @@ const routeToPage: Record<string, PageType> = {
   '/journals': 'journals',
   '/tags': 'tags',
   '/settings': 'settings',
-  '/settings/genai-api': 'settings',
+  '/settings/research': 'research',
+  '/settings/api': 'apisettings',
   '/trends': 'trends',
 };
 
@@ -29,6 +34,8 @@ const pageToRoute: Record<PageType, string> = {
   journals: '/journals',
   tags: '/tags',
   settings: '/settings',
+  research: '/settings/research',
+  apisettings: '/settings/api',
   trends: '/trends',
 };
 
@@ -85,9 +92,8 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
     }
   };
 
-  // 手動フェッチ（管理者のみ）
+  // 手動フェッチ
   const handleManualFetch = async (): Promise<void> => {
-    if (!user.isAdmin) return;
     setIsRefreshing(true);
     try {
       await api.admin.runScheduler();
@@ -106,7 +112,7 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
         onNavigate={handleNavigate}
         onLogout={handleLogout}
         isRefreshing={isRefreshing}
-        onManualFetch={user.isAdmin ? handleManualFetch : undefined}
+        onManualFetch={handleManualFetch}
       />
       <Routes>
         <Route path="/" element={<Navigate to="/papers" replace />} />
@@ -115,7 +121,8 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
         <Route path="/tags" element={<TagManagement />} />
         <Route path="/tags/:tagId" element={<TagManagement />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/genai-api" element={<Settings />} />
+        <Route path="/settings/research" element={<ResearchSettings />} />
+        <Route path="/settings/api" element={<ApiSettings />} />
         <Route path="/trends" element={<Trends />} />
         <Route path="*" element={<Navigate to="/papers" replace />} />
       </Routes>
@@ -127,6 +134,18 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
 function AppRoutes(): JSX.Element {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ユーザー情報を再取得する関数
+  const refreshUser = async (): Promise<void> => {
+    try {
+      const data = await api.auth.me();
+      if (data.authenticated) {
+        setUser(data.user);
+      }
+    } catch {
+      console.log('Failed to refresh user');
+    }
+  };
 
   // 認証状態をチェック
   useEffect(() => {
@@ -146,6 +165,22 @@ function AppRoutes(): JSX.Element {
     checkAuth();
   }, []);
 
+  // user-updated イベントをリッスンしてユーザー情報を再取得
+  useEffect(() => {
+    const handleUserUpdated = () => {
+      refreshUser();
+    };
+    window.addEventListener('user-updated', handleUserUpdated);
+    return () => {
+      window.removeEventListener('user-updated', handleUserUpdated);
+    };
+  }, []);
+
+  // 初期設定完了時のコールバック
+  const handleInitialSetupComplete = () => {
+    setUser(prev => prev ? { ...prev, initialSetupCompleted: true } : null);
+  };
+
   // ローディング中
   if (loading) {
     return (
@@ -161,15 +196,41 @@ function AppRoutes(): JSX.Element {
         path="/login"
         element={
           <PublicRoute user={user}>
-            <LoginForm onLogin={setUser} />
+            <LoginForm mode="login" onLogin={setUser} />
           </PublicRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicRoute user={user}>
+            <LoginForm mode="register" onLogin={setUser} />
+          </PublicRoute>
+        }
+      />
+      {/* 初期設定ページ */}
+      <Route
+        path="/initial-setup"
+        element={
+          <ProtectedRoute user={user}>
+            {user && !user.initialSetupCompleted ? (
+              <InitialSetup onComplete={handleInitialSetupComplete} />
+            ) : (
+              <Navigate to="/papers" replace />
+            )}
+          </ProtectedRoute>
         }
       />
       <Route
         path="/*"
         element={
           <ProtectedRoute user={user}>
-            <MainLayout user={user!} onLogout={() => setUser(null)} />
+            {/* 初期設定未完了の場合はリダイレクト */}
+            {user && !user.initialSetupCompleted ? (
+              <Navigate to="/initial-setup" replace />
+            ) : (
+              <MainLayout user={user!} onLogout={() => setUser(null)} />
+            )}
           </ProtectedRoute>
         }
       />
@@ -181,8 +242,10 @@ export default function App(): JSX.Element {
   const basePath = getBasePath();
 
   return (
-    <BrowserRouter basename={basePath}>
-      <AppRoutes />
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter basename={basePath}>
+        <AppRoutes />
+      </BrowserRouter>
+    </ToastProvider>
   );
 }

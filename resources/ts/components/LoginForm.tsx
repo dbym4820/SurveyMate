@@ -1,17 +1,19 @@
 import { useState, FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { LogIn, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { getBasePath } from '../api';
 import api from '../api';
 import type { User } from '../types';
 
+type FormMode = 'login' | 'register';
+
 interface LoginFormProps {
+  mode: FormMode;
   onLogin: (user: User) => void;
 }
 
-type FormMode = 'login' | 'register';
-
-export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
-  const [mode, setMode] = useState<FormMode>('login');
+export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Element {
+  const navigate = useNavigate();
   const [userId, setUserId] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -20,21 +22,6 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const resetForm = (): void => {
-    setUserId('');
-    setUsername('');
-    setPassword('');
-    setConfirmPassword('');
-    setEmail('');
-    setError('');
-    setSuccess('');
-  };
-
-  const switchMode = (newMode: FormMode): void => {
-    resetForm();
-    setMode(newMode);
-  };
 
   const validateRegistration = (): string | null => {
     if (userId.length < 3 || userId.length > 50) {
@@ -75,11 +62,11 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
     if (data.expiresAt) {
       onLogin(data.user);
     } else {
-      // 自動ログインされなかった場合はログインフォームに戻す
+      // 自動ログインされなかった場合はログインページへ
       setSuccess('登録が完了しました．ログインしてください．');
-      setMode('login');
-      setPassword('');
-      setConfirmPassword('');
+      setTimeout(() => {
+        navigate('/login');
+      }, 1500);
     }
   };
 
@@ -123,28 +110,26 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
 
         {/* モード切り替えタブ */}
         <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => switchMode('login')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+          <Link
+            to="/login"
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors text-center ${
               mode === 'login'
                 ? 'bg-white text-gray-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             ログイン
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode('register')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+          </Link>
+          <Link
+            to="/register"
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors text-center ${
               mode === 'register'
                 ? 'bg-white text-gray-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             新規登録
-          </button>
+          </Link>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -197,7 +182,6 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
                 required
                 autoComplete="name"
               />
-              <p className="text-xs text-gray-500 mt-1">他のユーザーと同じ名前でもOK．後から変更可能．</p>
             </div>
           )}
 
@@ -269,10 +253,20 @@ export default function LoginForm({ onLogin }: LoginFormProps): JSX.Element {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-gray-500">
-          {mode === 'login'
-            ? 'アカウントをお持ちでない場合は「新規登録」タブから登録できます'
-            : '登録完了後，自動的にログインします'}
+        {mode === 'login' && (
+          <p className="mt-6 text-center text-xs text-gray-500">
+            アカウントをお持ちでない場合は<Link to="/register" className="text-gray-700 underline">新規登録</Link>
+          </p>
+        )}
+
+        {mode === 'register' && (
+          <p className="mt-6 text-center text-xs text-gray-500">
+            アカウントをお持ちの場合は<Link to="/login" className="text-gray-700 underline">ログイン</Link>
+          </p>
+        )}
+
+        <p className="mt-4 text-center text-[10px] text-gray-400">
+          ※ このシステムは予告なく仕様変更・データのリセットを実施する場合があります
         </p>
       </div>
     </div>

@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText } from 'lucide-react';
 import api from '../api';
+import { useToast } from './Toast';
 import type { Paper, Summary, Tag as TagType, ChatMessage } from '../types';
 
 interface PaperCardProps {
   paper: Paper;
-  selectedProvider: string;
   onTagsChange?: () => void;
+  hasAnyApiKey?: boolean;
 }
 
-export default function PaperCard({ paper, selectedProvider, onTagsChange }: PaperCardProps): JSX.Element {
+export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: PaperCardProps): JSX.Element {
+  const { showToast } = useToast();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -79,15 +81,16 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
   const generateSummary = async (): Promise<void> => {
     setLoading(true);
     try {
-      const data = await api.summaries.generate(paper.id, selectedProvider);
+      const data = await api.summaries.generate(paper.id);
       if (data.success) {
         setSummary(data.summary);
         setExpanded(true);
+        showToast('AI要約を生成しました', 'success');
       } else {
         throw new Error('Summary generation failed');
       }
     } catch (error) {
-      alert('要約の生成に失敗しました: ' + (error as Error).message);
+      showToast('要約の生成に失敗しました: ' + (error as Error).message, 'error');
     } finally {
       setLoading(false);
     }
@@ -234,7 +237,7 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
       }
     } catch (error) {
       console.error('Failed to send chat message:', error);
-      alert('メッセージの送信に失敗しました: ' + (error as Error).message);
+      showToast('メッセージの送信に失敗しました: ' + (error as Error).message, 'error');
       // 失敗時は仮メッセージを削除し、入力を復元
       setChatMessages((prev) => prev.filter((msg) => msg.id !== tempUserMessage.id));
       setChatInput(message);
@@ -327,7 +330,7 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
         document.body.style.overflow = 'hidden';
       }
     } catch (error) {
-      alert('本文の取得に失敗しました: ' + (error as Error).message);
+      showToast('本文の取得に失敗しました: ' + (error as Error).message, 'error');
     } finally {
       setFullTextLoading(false);
     }
@@ -545,20 +548,22 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
 
             {/* アクション */}
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              {/* AI要約ボタン：要約がない場合は生成ボタン，ある場合は表示トグル */}
+              {/* AI要約ボタン：要約がない場合は生成ボタン（APIキー設定時のみ），ある場合は表示トグル */}
               {!hasSummary ? (
-                <button
-                  onClick={generateSummary}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-gray-500 to-purple-500 text-white text-xs sm:text-sm rounded-lg hover:from-gray-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
-                >
-                  {loading ? (
-                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  )}
-                  {loading ? '生成中...' : 'AI要約'}
-                </button>
+                hasAnyApiKey && (
+                  <button
+                    onClick={generateSummary}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-gray-500 to-purple-500 text-white text-xs sm:text-sm rounded-lg hover:from-gray-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    )}
+                    {loading ? '生成中...' : 'AI要約'}
+                  </button>
+                )
               ) : (
                 <button
                   onClick={() => setExpanded(!expanded)}
@@ -652,21 +657,23 @@ export default function PaperCard({ paper, selectedProvider, onTagsChange }: Pap
                   )}
                 </div>
 
-                {/* チャットトグルボタン */}
-                <div className="mt-4 pt-3 border-t border-gray-200">
-                  <button
-                    onClick={toggleChat}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    {chatOpen ? 'チャットを閉じる' : 'この要約について質問する'}
-                    {chatMessages.length > 0 && !chatOpen && (
-                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
-                        {chatMessages.length}
-                      </span>
-                    )}
-                  </button>
-                </div>
+                {/* チャットトグルボタン（APIキー設定時のみ） */}
+                {hasAnyApiKey && (
+                  <div className="mt-4 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={toggleChat}
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      {chatOpen ? 'チャットを閉じる' : 'この要約について質問する'}
+                      {chatMessages.length > 0 && !chatOpen && (
+                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                          {chatMessages.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* チャットパネル */}
                 {chatOpen && (

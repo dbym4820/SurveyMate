@@ -5,16 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Models\Session;
 use App\Models\Journal;
-use App\Services\RssFetcherService;
 
 class AuthController extends Controller
 {
-    public function __construct(
-        private RssFetcherService $rssFetcherService
-    ) {}
 
     public function login(Request $request): JsonResponse
     {
@@ -54,6 +51,8 @@ class AuthController extends Controller
                 'username' => $user->username,
                 'email' => $user->email,
                 'isAdmin' => $user->is_admin,
+                'initialSetupCompleted' => $user->initial_setup_completed,
+                'hasAnyApiKey' => !empty($user->openai_api_key) || !empty($user->claude_api_key),
             ],
             'expiresAt' => now()->addSeconds($sessionLifetime)->toISOString(),
         ])->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
@@ -99,11 +98,12 @@ class AuthController extends Controller
                 'is_active' => true,
             ]);
 
-            // デフォルト論文誌を作成（失敗してもユーザー登録は継続）
+            // デフォルト論文誌を作成（RSS取得なし）
+            // RSSはユーザーが手動で取得するか，スケジューラが自動取得する
             try {
-                $this->createDefaultJournals($user);
+                $this->createDefaultJournalsWithoutFetch($user);
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::warning("デフォルト論文誌の作成に失敗: " . $e->getMessage());
+                Log::warning("デフォルト論文誌の作成に失敗: " . $e->getMessage());
             }
 
             // 自動ログイン: セッション作成
@@ -120,6 +120,8 @@ class AuthController extends Controller
                     'username' => $user->username,
                     'email' => $user->email,
                     'isAdmin' => $user->is_admin,
+                    'initialSetupCompleted' => $user->initial_setup_completed,
+                    'hasAnyApiKey' => false,
                 ],
                 'expiresAt' => now()->addSeconds($sessionLifetime)->toISOString(),
             ], 201)->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
@@ -178,17 +180,20 @@ class AuthController extends Controller
                 'username' => $user->username,
                 'email' => $user->email,
                 'isAdmin' => $user->is_admin,
+                'initialSetupCompleted' => $user->initial_setup_completed,
+                'hasAnyApiKey' => !empty($user->openai_api_key) || !empty($user->claude_api_key),
                 'last_login_at' => $user->last_login_at,
             ],
         ]);
     }
 
     /**
-     * 新規ユーザーにデフォルトの論文誌を作成し，初回RSS取得を実行
+     * 新規ユーザーにデフォルトの論文誌を作成（RSS取得なし）
      */
-    private function createDefaultJournals(User $user): void
+    private function createDefaultJournalsWithoutFetch(User $user): array
     {
         $defaultJournals = config('surveymate.default_journals', []);
+        $createdJournals = [];
 
         foreach ($defaultJournals as $journalConfig) {
             $name = $journalConfig['name'];
@@ -204,13 +209,10 @@ class AuthController extends Controller
                 'is_active' => true,
             ]);
 
-            // 初回RSS取得を実行（バックグラウンドで非同期処理が望ましいが，初回なので同期で実行）
-            try {
-                $this->rssFetcherService->fetchJournal($journal);
-            } catch (\Exception $e) {
-                // 初回取得に失敗しても登録は継続
-                \Illuminate\Support\Facades\Log::warning("初回RSS取得に失敗: {$journal->name}", ['error' => $e->getMessage()]);
-            }
+            $createdJournals[] = $journal;
         }
+
+        return $createdJournals;
     }
+
 }

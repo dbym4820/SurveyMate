@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag, Compass, Home
+  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag, Compass, Home, Bot
 } from 'lucide-react';
 import { getBasePath } from '../api';
 import type { User } from '../types';
-import ResearchPerspectiveModal from './ResearchPerspectiveModal';
 
-type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags';
+type PageType = 'papers' | 'journals' | 'settings' | 'trends' | 'tags' | 'research' | 'apisettings';
 
 interface HeaderProps {
   user: User;
@@ -27,7 +26,6 @@ export default function Header({
 }: HeaderProps): JSX.Element {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [perspectiveModalOpen, setPerspectiveModalOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close user menu when clicking outside
@@ -48,7 +46,7 @@ export default function Header({
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-      <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4">
+      <div className="w-[85%] mx-auto py-3 sm:py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => handleNavigate('papers')}>
@@ -70,17 +68,19 @@ export default function Header({
               Home
             </button>
 
-            <button
-              onClick={() => onNavigate('trends')}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                currentPage === 'trends'
-                  ? 'border-gray-500 bg-gray-50 text-gray-700'
-                  : 'border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              トレンド
-            </button>
+            {user.hasAnyApiKey && (
+              <button
+                onClick={() => onNavigate('trends')}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                  currentPage === 'trends'
+                    ? 'border-gray-500 bg-gray-50 text-gray-700'
+                    : 'border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                トレンド
+              </button>
+            )}
 
             <button
               onClick={() => onNavigate('tags')}
@@ -94,7 +94,7 @@ export default function Header({
               Tagグループ
             </button>
 
-            {user.isAdmin && onManualFetch && (
+            {onManualFetch && (
               <button
                 onClick={onManualFetch}
                 disabled={isRefreshing}
@@ -139,13 +139,31 @@ export default function Header({
                   </button>
                   <button
                     onClick={() => {
-                      setPerspectiveModalOpen(true);
+                      onNavigate('research');
                       setUserMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-gray-50 text-gray-700 transition-colors"
+                    className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
+                      currentPage === 'research'
+                        ? 'bg-gray-50 text-gray-700'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
                   >
                     <Compass className="w-4 h-4" />
                     調査観点設定
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigate('apisettings');
+                      setUserMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors ${
+                      currentPage === 'apisettings'
+                        ? 'bg-gray-50 text-gray-700'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <Bot className="w-4 h-4" />
+                    生成AI設定
                   </button>
                   <button
                     onClick={() => {
@@ -179,7 +197,7 @@ export default function Header({
 
           {/* Mobile Menu Button */}
           <div className="flex md:hidden items-center gap-2">
-            {user.isAdmin && onManualFetch && (
+            {onManualFetch && (
               <button
                 onClick={onManualFetch}
                 disabled={isRefreshing}
@@ -213,17 +231,19 @@ export default function Header({
                 Home
               </button>
 
-              <button
-                onClick={() => handleNavigate('trends')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  currentPage === 'trends'
-                    ? 'bg-gray-50 text-gray-700'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <TrendingUp className="w-5 h-5" />
-                トレンド分析
-              </button>
+              {user.hasAnyApiKey && (
+                <button
+                  onClick={() => handleNavigate('trends')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    currentPage === 'trends'
+                      ? 'bg-gray-50 text-gray-700'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <TrendingUp className="w-5 h-5" />
+                  トレンド分析
+                </button>
+              )}
 
               <button
                 onClick={() => handleNavigate('tags')}
@@ -236,6 +256,20 @@ export default function Header({
                 <Tag className="w-5 h-5" />
                 Tagグループ
               </button>
+
+              {onManualFetch && (
+                <button
+                  onClick={() => {
+                    onManualFetch();
+                    setMobileMenuOpen(false);
+                  }}
+                  disabled={isRefreshing}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'フィード取得中...' : 'フィード取得'}
+                </button>
+              )}
 
               <button
                 onClick={() => handleNavigate('journals')}
@@ -250,14 +284,27 @@ export default function Header({
               </button>
 
               <button
-                onClick={() => {
-                  setPerspectiveModalOpen(true);
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-gray-50"
+                onClick={() => handleNavigate('research')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentPage === 'research'
+                    ? 'bg-gray-50 text-gray-700'
+                    : 'hover:bg-gray-50'
+                }`}
               >
                 <Compass className="w-5 h-5" />
                 調査観点設定
+              </button>
+
+              <button
+                onClick={() => handleNavigate('apisettings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  currentPage === 'apisettings'
+                    ? 'bg-gray-50 text-gray-700'
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <Bot className="w-5 h-5" />
+                生成AI設定
               </button>
 
               <button
@@ -297,11 +344,6 @@ export default function Header({
         )}
       </div>
 
-      {/* Research Perspective Modal */}
-      <ResearchPerspectiveModal
-        isOpen={perspectiveModalOpen}
-        onClose={() => setPerspectiveModalOpen(false)}
-      />
     </header>
   );
 }

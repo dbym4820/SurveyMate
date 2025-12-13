@@ -302,6 +302,14 @@ echo "  Running migrations..."
 $PHP_BIN artisan migrate --force
 echo "  Database migration: Complete"
 
+# Sync admin API keys from .env
+ADMIN_CLAUDE_KEY=$(grep "^ADMIN_CLAUDE_API_KEY=" .env | cut -d '=' -f2)
+ADMIN_OPENAI_KEY=$(grep "^ADMIN_OPENAI_API_KEY=" .env | cut -d '=' -f2)
+if [ -n "$ADMIN_CLAUDE_KEY" ] || [ -n "$ADMIN_OPENAI_KEY" ]; then
+    echo "  Syncing admin API keys..."
+    $PHP_BIN artisan admin:sync-api-keys
+fi
+
 echo ""
 
 #######################################

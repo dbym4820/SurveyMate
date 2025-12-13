@@ -9,15 +9,20 @@ use App\Models\Journal;
 use App\Models\FetchLog;
 use App\Models\User;
 use App\Services\RssFetcherService;
+use App\Services\AiRssGeneratorService;
 
 class AdminController extends Controller
 {
     /** @var RssFetcherService */
     private $rssFetcher;
 
-    public function __construct(RssFetcherService $rssFetcher)
+    /** @var AiRssGeneratorService */
+    private $aiRssGenerator;
+
+    public function __construct(RssFetcherService $rssFetcher, AiRssGeneratorService $aiRssGenerator)
     {
         $this->rssFetcher = $rssFetcher;
+        $this->aiRssGenerator = $aiRssGenerator;
     }
 
     // ======================================
@@ -106,10 +111,14 @@ class AdminController extends Controller
         if (isset($data['rssUrl']) && !isset($data['rss_url'])) {
             $data['rss_url'] = $data['rssUrl'];
         }
+        if (isset($data['sourceType']) && !isset($data['source_type'])) {
+            $data['source_type'] = $data['sourceType'];
+        }
 
         $validator = Validator::make($data, [
             'name' => 'required|string|max:500',
             'rss_url' => 'required|url|max:500',
+            'source_type' => 'nullable|string|in:rss,ai_generated',
             'color' => 'nullable|string|max:50',
         ]);
 
@@ -119,6 +128,16 @@ class AdminController extends Controller
 
         $journalData = $validator->validated();
         $journalData['user_id'] = $user->id;
+        $journalData['source_type'] = $journalData['source_type'] ?? 'rss';
+
+        // AI生成の場合はAPIキーが必要
+        if ($journalData['source_type'] === 'ai_generated') {
+            if (!$user->hasClaudeApiKey() && !$user->hasOpenaiApiKey()) {
+                return response()->json([
+                    'error' => 'AI生成RSSを使用するには，設定画面でOpenAIまたはClaudeのAPIキーを登録してください',
+                ], 400);
+            }
+        }
 
         // IDを正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
         $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $journalData['name']));
@@ -133,12 +152,26 @@ class AdminController extends Controller
         $journalData['id'] = $journalId;
         $journal = Journal::create($journalData);
 
-        // 初回RSSフェッチを実行
-        $fetchResult = $this->rssFetcher->fetchJournal($journal);
+        // 初回フェッチを実行
+        if ($journal->isAiGenerated()) {
+            // AI生成の場合
+            $fetchResult = $this->aiRssGenerator->generateFeed($journal, $user);
+            $message = '論文誌を追加しました';
+            if ($fetchResult['success']) {
+                $message .= '（' . ($fetchResult['papers_count'] ?? 0) . '件の論文を検出）';
+            }
+        } else {
+            // 通常RSSの場合
+            $fetchResult = $this->rssFetcher->fetchJournal($journal);
+            $message = '論文誌を追加しました';
+        }
+
+        // generatedFeedの情報も返す
+        $journal->load('generatedFeed');
 
         return response()->json([
             'success' => true,
-            'message' => '論文誌を追加しました',
+            'message' => $message,
             'journal' => $journal,
             'fetch_result' => $fetchResult,
         ], 201);
@@ -174,6 +207,9 @@ class AdminController extends Controller
         $journal->update(array_filter($validator->validated(), function ($v) {
             return $v !== null;
         }));
+
+        // generatedFeedの情報も返す
+        $journal->load('generatedFeed');
 
         return response()->json([
             'success' => true,
@@ -268,6 +304,40 @@ class AdminController extends Controller
             'success' => true,
             'message' => 'RSS取得を実行しました',
             'result' => $result,
+        ]);
+    }
+
+    /**
+     * 現在のユーザーの全論文誌をフェッチ
+     */
+    public function fetchAllJournals(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $results = $this->rssFetcher->fetchForUser($user->id);
+
+        $totalNew = 0;
+        $totalFetched = 0;
+        $errors = [];
+
+        foreach ($results as $journalId => $result) {
+            if ($result['status'] === 'success') {
+                $totalNew += $result['new_papers'] ?? 0;
+                $totalFetched += $result['papers_fetched'] ?? 0;
+            } else {
+                $errors[$journalId] = $result['error'] ?? 'Unknown error';
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "RSS取得を実行しました（{$totalNew}件の新規論文）",
+            'results' => $results,
+            'summary' => [
+                'total_new' => $totalNew,
+                'total_fetched' => $totalFetched,
+                'error_count' => count($errors),
+            ],
         ]);
     }
 

@@ -1,20 +1,62 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, RefreshCw, Edit, Trash2,
-  ToggleRight, Loader2, FileText, Clock, Rss
+  Plus, RefreshCw, Edit,
+  ToggleLeft, ToggleRight, Loader2, FileText, Clock, Rss, Sparkles, Copy, Check, ExternalLink
 } from 'lucide-react';
-import api from '../api';
+import api, { getBasePath } from '../api';
 import JournalModal from './JournalModal';
 import { RSS_URL_EXAMPLES } from '../constants';
+import { useToast } from './Toast';
 import type { Journal } from '../types';
 
 export default function JournalManagement(): JSX.Element {
+  const { showToast } = useToast();
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingJournal, setEditingJournal] = useState<Journal | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [fetchingJournal, setFetchingJournal] = useState<string | null>(null);
+  const [fetchingAll, setFetchingAll] = useState(false);
+  const [regeneratingJournal, setRegeneratingJournal] = useState<string | null>(null);
+  const [copiedFeedUrl, setCopiedFeedUrl] = useState<string | null>(null);
+
+  // RSS配信URLを生成
+  const getFeedUrl = (feedToken: string): string => {
+    const basePath = getBasePath();
+    return `${window.location.origin}${basePath}/rss/${feedToken}`;
+  };
+
+  // URLをクリップボードにコピー
+  const copyFeedUrl = async (feedToken: string): Promise<void> => {
+    const url = getFeedUrl(feedToken);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedFeedUrl(feedToken);
+      setTimeout(() => setCopiedFeedUrl(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  // AI生成フィードを再生成
+  const handleRegenerateFeed = async (journal: Journal): Promise<void> => {
+    setRegeneratingJournal(journal.id);
+    try {
+      const result = await api.journals.regenerateFeed(journal.id);
+      if (result.success) {
+        const methodLabel = result.provider === 'selector' ? 'セレクタ解析' : result.provider;
+        showToast(`${journal.name}: ${result.papers_count || 0}件の論文を検出（${methodLabel}）`, 'success');
+        fetchJournals();
+      } else {
+        showToast('再生成に失敗しました: ' + (result.error || ''), 'error');
+      }
+    } catch (error) {
+      showToast('再生成に失敗しました: ' + (error as Error).message, 'error');
+    } finally {
+      setRegeneratingJournal(null);
+    }
+  };
 
   useEffect(() => {
     fetchJournals();
@@ -50,18 +92,20 @@ export default function JournalManagement(): JSX.Element {
 
     try {
       await api.journals.delete(journal.id);
+      showToast('論文誌を無効化しました', 'success');
       fetchJournals();
     } catch (error) {
-      alert('無効化に失敗しました: ' + (error as Error).message);
+      showToast('無効化に失敗しました: ' + (error as Error).message, 'error');
     }
   };
 
   const handleActivate = async (journal: Journal): Promise<void> => {
     try {
       await api.journals.activate(journal.id);
+      showToast('論文誌を有効化しました', 'success');
       fetchJournals();
     } catch (error) {
-      alert('有効化に失敗しました: ' + (error as Error).message);
+      showToast('有効化に失敗しました: ' + (error as Error).message, 'error');
     }
   };
 
@@ -70,27 +114,59 @@ export default function JournalManagement(): JSX.Element {
     try {
       const data = await api.journals.fetch(journal.id);
       if (data.result.status === 'success') {
-        alert(`${journal.name}: ${data.result.new_papers || 0}件の新規論文を取得しました`);
+        showToast(`${journal.name}: ${data.result.new_papers || 0}件の新規論文を取得`, 'success');
         fetchJournals();
       } else {
-        alert('取得に失敗しました: ' + (data.result.error || ''));
+        showToast('取得に失敗しました: ' + (data.result.error || ''), 'error');
       }
     } catch (error) {
-      alert('取得に失敗しました: ' + (error as Error).message);
+      showToast('取得に失敗しました: ' + (error as Error).message, 'error');
     } finally {
       setFetchingJournal(null);
     }
   };
 
+  const handleFetchAll = async (): Promise<void> => {
+    setFetchingAll(true);
+    try {
+      const data = await api.journals.fetchAll();
+      if (data.success) {
+        const { total_new, error_count } = data.summary;
+        if (error_count > 0) {
+          showToast(`${total_new}件の新規論文を取得（${error_count}件のエラー）`, 'info');
+        } else {
+          showToast(`${total_new}件の新規論文を取得しました`, 'success');
+        }
+        fetchJournals();
+      }
+    } catch (error) {
+      showToast('取得に失敗しました: ' + (error as Error).message, 'error');
+    } finally {
+      setFetchingAll(false);
+    }
+  };
+
   return (
-    <main className="max-w-6xl mx-auto px-4 py-6">
+    <main className="w-[85%] mx-auto py-6">
       {/* アクションバー */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <FileText className="w-4 h-4" />
           {journals.length}件の論文誌
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleFetchAll}
+            disabled={fetchingAll || journals.filter(j => j.is_active !== 0 && j.is_active !== false).length === 0}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {fetchingAll ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {fetchingAll ? '取得中...' : 'すべてフェッチ'}
+          </button>
           <button
             onClick={() => {
               setEditingJournal(null);
@@ -145,6 +221,12 @@ export default function JournalManagement(): JSX.Element {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{journal.name}</h3>
+                      {journal.source_type === 'ai_generated' && (
+                        <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          AI生成
+                        </span>
+                      )}
                       {(journal.is_active === 0 || journal.is_active === false) && (
                         <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
                           無効
@@ -163,27 +245,69 @@ export default function JournalManagement(): JSX.Element {
                         </span>
                       )}
                     </div>
+                    {/* ソースURL */}
                     <div className="mt-2 text-xs text-gray-400 truncate">
-                      <Rss className="w-3 h-3 inline mr-1" />
+                      {journal.source_type === 'ai_generated' ? (
+                        <ExternalLink className="w-3 h-3 inline mr-1" />
+                      ) : (
+                        <Rss className="w-3 h-3 inline mr-1" />
+                      )}
                       {journal.rss_url}
                     </div>
+                    {/* AI生成フィードURL */}
+                    {journal.source_type === 'ai_generated' && journal.generated_feed?.feed_token && (
+                      <div className="mt-2 flex items-center gap-2 overflow-hidden">
+                        <div className="flex-1 min-w-0 text-xs bg-gray-50 px-2 py-1 rounded font-mono overflow-hidden">
+                          <Rss className="w-3 h-3 inline mr-1 text-orange-500 flex-shrink-0" />
+                          <span className="truncate inline-block align-middle max-w-[calc(100%-1rem)]">
+                            {getFeedUrl(journal.generated_feed.feed_token)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => copyFeedUrl(journal.generated_feed!.feed_token)}
+                          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="URLをコピー"
+                        >
+                          {copiedFeedUrl === journal.generated_feed.feed_token ? (
+                            <Check className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* アクション */}
                   <div className="flex items-center gap-2">
                     {journal.is_active !== 0 && journal.is_active !== false && (
-                      <button
-                        onClick={() => handleFetchNow(journal)}
-                        disabled={fetchingJournal === journal.id}
-                        className="p-2 text-gray-600 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="今すぐ取得"
-                      >
-                        {fetchingJournal === journal.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4" />
-                        )}
-                      </button>
+                      journal.source_type === 'ai_generated' ? (
+                        <button
+                          onClick={() => handleRegenerateFeed(journal)}
+                          disabled={regeneratingJournal === journal.id}
+                          className="p-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="AIで再生成"
+                        >
+                          {regeneratingJournal === journal.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-4 h-4" />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleFetchNow(journal)}
+                          disabled={fetchingJournal === journal.id}
+                          className="p-2 text-gray-600 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="今すぐ取得"
+                        >
+                          {fetchingJournal === journal.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                        </button>
+                      )
                     )}
                     <button
                       onClick={() => handleEdit(journal)}
@@ -195,18 +319,18 @@ export default function JournalManagement(): JSX.Element {
                     {journal.is_active === 0 || journal.is_active === false ? (
                       <button
                         onClick={() => handleActivate(journal)}
-                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                         title="有効化"
                       >
-                        <ToggleRight className="w-4 h-4" />
+                        <ToggleLeft className="w-4 h-4" />
                       </button>
                     ) : (
                       <button
                         onClick={() => handleDelete(journal)}
-                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-green-600 hover:text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"
                         title="無効化"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <ToggleRight className="w-4 h-4" />
                       </button>
                     )}
                   </div>

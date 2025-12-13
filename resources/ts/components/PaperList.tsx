@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Filter, Calendar, Sparkles, ChevronDown, ChevronUp, Loader2, FileText, Tag, X, BookOpen
+  Filter, Calendar, ChevronDown, ChevronUp, Loader2, FileText, Tag, X, BookOpen
 } from 'lucide-react';
 import api from '../api';
 import PaperCard from './PaperCard';
 import TagSummaryModal from './TagSummaryModal';
 import Toast, { ToastType } from './Toast';
 import { DATE_FILTERS } from '../constants';
-import type { Paper, Journal, AIProvider, Pagination, Tag as TagType } from '../types';
+import type { Paper, Journal, Pagination, Tag as TagType, ApiSettings } from '../types';
 
 interface ToastState {
   show: boolean;
@@ -32,16 +32,15 @@ export default function PaperList(): JSX.Element {
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [tagSummaryTag, setTagSummaryTag] = useState<TagType | null>(null);
 
+  // APIキー設定状態
+  const [settings, setSettings] = useState<ApiSettings | null>(null);
+
   // Toast notification
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
 
   const hideToast = () => {
     setToast((prev) => ({ ...prev, show: false }));
   };
-
-  // AI related
-  const [aiProviders, setAiProviders] = useState<AIProvider[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState('openai');
 
   // Fetch journals
   const fetchJournals = useCallback(async (): Promise<void> => {
@@ -70,27 +69,25 @@ export default function PaperList(): JSX.Element {
     }
   }, []);
 
-  // Fetch AI providers
-  useEffect(() => {
-    async function fetchProviders(): Promise<void> {
-      try {
-        const data = await api.summaries.providers();
-        if (data.success) {
-          setAiProviders(data.providers);
-          setSelectedProvider(data.current);
-        }
-      } catch (error) {
-        console.error('Failed to fetch providers:', error);
-      }
+  // Fetch settings (API key status)
+  const fetchSettings = useCallback(async (): Promise<void> => {
+    try {
+      const data = await api.settings.getApi();
+      setSettings(data);
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
     }
-    fetchProviders();
   }, []);
+
+  // APIキー設定有無
+  const hasAnyApiKey = settings?.claude_api_key_set || settings?.openai_api_key_set;
 
   // Initial load
   useEffect(() => {
     fetchJournals();
     fetchTags();
-  }, [fetchJournals, fetchTags]);
+    fetchSettings();
+  }, [fetchJournals, fetchTags, fetchSettings]);
 
   // URLパラメータからタグ要約モーダルを開く
   useEffect(() => {
@@ -182,7 +179,7 @@ export default function PaperList(): JSX.Element {
 
   return (
     <>
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <main className="w-[85%] mx-auto py-4 sm:py-6">
         {/* Filter bar */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 sm:items-center sm:justify-between">
@@ -303,8 +300,8 @@ export default function PaperList(): JSX.Element {
                                 </div>
                               </div>
                             </label>
-                            {/* タグ要約ボタン */}
-                            {(tag.paper_count ?? 0) > 0 && (
+                            {/* タグ要約ボタン（APIキー設定時のみ） */}
+                            {hasAnyApiKey && (tag.paper_count ?? 0) > 0 && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -349,24 +346,6 @@ export default function PaperList(): JSX.Element {
                 </select>
               </div>
 
-              {/* AI provider selection */}
-              {aiProviders.length > 0 && (
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <Sparkles className="w-4 h-4 text-gray-500" />
-                  <select
-                    value={selectedProvider}
-                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-                  >
-                    {aiProviders.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               {/* Count display (desktop) */}
               <div className="hidden sm:block text-sm text-gray-600 font-medium">
                 {pagination.total}件の論文
@@ -386,11 +365,11 @@ export default function PaperList(): JSX.Element {
               <PaperCard
                 key={paper.id}
                 paper={paper}
-                selectedProvider={selectedProvider}
                 onTagsChange={() => {
                   fetchTags();
                   fetchPapers();
                 }}
+                hasAnyApiKey={hasAnyApiKey}
               />
             ))}
           </div>
@@ -433,6 +412,7 @@ export default function PaperList(): JSX.Element {
         <TagSummaryModal
           tag={tagSummaryTag}
           onClose={closeTagSummary}
+          hasAnyApiKey={hasAnyApiKey}
         />
       )}
     </>

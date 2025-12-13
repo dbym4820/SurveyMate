@@ -11,6 +11,7 @@ use App\Http\Controllers\TrendController;
 use App\Http\Controllers\PushController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\SummaryChatController;
+use App\Http\Controllers\GeneratedRssController;
 use App\Http\Middleware\SessionAuth;
 use App\Http\Middleware\AdminOnly;
 
@@ -114,6 +115,14 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::get('/settings/research-perspective', [SettingsController::class, 'getResearchPerspective']);
     Route::put('/settings/research-perspective', [SettingsController::class, 'updateResearchPerspective']);
 
+    // Summary Template（要約テンプレート設定）
+    Route::get('/settings/summary-template', [SettingsController::class, 'getSummaryTemplate']);
+    Route::put('/settings/summary-template', [SettingsController::class, 'updateSummaryTemplate']);
+
+    // Initial Setup（初期設定）
+    Route::post('/settings/initial-setup/complete', [SettingsController::class, 'completeInitialSetup']);
+    Route::post('/settings/initial-setup/skip', [SettingsController::class, 'skipInitialSetup']);
+
     // Trends
     Route::prefix('trends')->group(function () {
         Route::get('/stats', [TrendController::class, 'stats']);
@@ -127,7 +136,10 @@ Route::middleware(SessionAuth::class)->group(function () {
         // Journal management (authenticated users)
         Route::post('/journals', [AdminController::class, 'createJournal']);
         Route::post('/journals/test-rss', [AdminController::class, 'testRss']);
+        Route::post('/journals/test-page', [GeneratedRssController::class, 'testPage']);
+        Route::post('/journals/fetch-all', [AdminController::class, 'fetchAllJournals']);
         Route::get('/journals/{id}/fetch', [AdminController::class, 'fetchJournal']);
+        Route::post('/journals/{id}/regenerate-feed', [GeneratedRssController::class, 'regenerate']);
         Route::put('/journals/{id}', [AdminController::class, 'updateJournal']);
         Route::delete('/journals/{id}', [AdminController::class, 'deleteJournal']);
         Route::post('/journals/{id}/activate', [AdminController::class, 'activateJournal']);

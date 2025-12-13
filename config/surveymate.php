@@ -2,24 +2,12 @@
 
 /*
 |--------------------------------------------------------------------------
-| Default Journal: IJAIED
-|--------------------------------------------------------------------------
-| International Journal of Artificial Intelligence in Education
-*/
-$defaultJournals = [
-    [
-        'name' => 'International Journal of Artificial Intelligence in Education',
-        'rss_url' => 'https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=40593',
-        'color' => 'bg-blue-500',
-    ],
-];
-
-/*
-|--------------------------------------------------------------------------
-| Additional Journals from .env (optional)
+| Default Journals from .env (optional)
 |--------------------------------------------------------------------------
 | Format: NAME|RSS_URL,NAME2|RSS_URL2,...
+| Example: IJAIED|https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=40593
 */
+$defaultJournals = [];
 $envJournals = env('DEFAULT_JOURNALS', '');
 
 if (!empty($envJournals)) {
@@ -56,8 +44,8 @@ return [
     | Default Journals for New Users
     |--------------------------------------------------------------------------
     |
-    | IJAIED is always included as default.
-    | Additional journals can be set via .env: DEFAULT_JOURNALS="NAME|RSS_URL,NAME2|RSS_URL2"
+    | Set via .env: DEFAULT_JOURNALS="NAME|RSS_URL,NAME2|RSS_URL2"
+    | Leave empty for no default journals.
     |
     */
 
@@ -79,6 +67,23 @@ return [
         'max_text_length' => env('FULLTEXT_MAX_LENGTH', 100000),
         'timeout' => env('FULLTEXT_TIMEOUT', 30),
         'retry_failed' => env('FULLTEXT_RETRY_FAILED', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default User Settings
+    |--------------------------------------------------------------------------
+    |
+    | デフォルトの要約テンプレートと調査観点設定
+    | .env で設定可能（ダブルクォートで囲んで複数行記述可）
+    |
+    */
+
+    'defaults' => [
+        'summary_template' => env('DEFAULT_SUMMARY_TEMPLATE', ''),
+        'research_fields' => env('DEFAULT_RESEARCH_FIELDS', ''),
+        'summary_perspective' => env('DEFAULT_SUMMARY_PERSPECTIVE', ''),
+        'reading_focus' => env('DEFAULT_READING_FOCUS', ''),
     ],
 
 ];

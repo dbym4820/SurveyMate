@@ -8,6 +8,19 @@ export interface User {
   username: string;    // 表示名
   email?: string | null;
   isAdmin: boolean;
+  initialSetupCompleted?: boolean;  // 初期設定完了フラグ
+  hasAnyApiKey?: boolean;           // APIキー設定済みフラグ
+}
+
+export interface GeneratedFeed {
+  id: number;
+  feed_token: string;
+  source_url: string;
+  ai_provider: string | null;
+  ai_model: string | null;
+  generation_status: 'pending' | 'success' | 'error';
+  error_message: string | null;
+  last_generated_at: string | null;
 }
 
 export interface Journal {
@@ -18,6 +31,8 @@ export interface Journal {
   is_active: number | boolean;
   last_fetched_at: string | null;
   paper_count?: number;
+  source_type?: 'rss' | 'ai_generated';
+  generated_feed?: GeneratedFeed | null;
 }
 
 export interface Tag {
@@ -166,6 +181,43 @@ export interface JournalFormData {
   name: string;
   rssUrl: string;
   color: string;
+  sourceType?: 'rss' | 'ai_generated';
+}
+
+// AI RSS生成関連
+export interface PageTestResult {
+  success: boolean;
+  selectors?: {
+    paper_container?: string;
+    title?: string;
+    title_attr?: string;
+    url?: string;
+    url_attr?: string;
+    authors?: string | null;
+    authors_attr?: string;
+    abstract?: string | null;
+    date?: string | null;
+    date_format?: string;
+  };
+  sample_papers?: Array<{
+    title: string;
+    url: string;
+  }>;
+  provider?: string;
+  page_size?: {
+    original: number;
+    cleaned: number;
+  };
+  error?: string;
+}
+
+export interface RegenerateFeedResult {
+  success: boolean;
+  message?: string;
+  papers_count?: number;
+  feed_token?: string;
+  provider?: string;
+  error?: string;
 }
 
 // API Settings types
@@ -292,4 +344,16 @@ export interface ResearchPerspectiveUpdateResponse {
   success: boolean;
   message: string;
   research_perspective: ResearchPerspective;
+}
+
+// Summary Template types（要約テンプレート設定）
+export interface SummaryTemplateResponse {
+  success: boolean;
+  summary_template: string;
+}
+
+export interface SummaryTemplateUpdateResponse {
+  success: boolean;
+  message: string;
+  summary_template: string;
 }

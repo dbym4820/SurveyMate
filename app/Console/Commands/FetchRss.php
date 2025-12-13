@@ -10,7 +10,8 @@ class FetchRss extends Command
 {
     protected $signature = 'rss:fetch
                             {journal? : The journal ID to fetch (optional, fetches all if not specified)}
-                            {--list : List all available journals}';
+                            {--list : List all available journals}
+                            {--user= : Fetch all journals for a specific user ID}';
 
     protected $description = 'Fetch RSS feeds from academic journals';
 
@@ -43,6 +44,7 @@ class FetchRss extends Command
         }
 
         $journalId = $this->argument('journal');
+        $userId = $this->option('user');
 
         if ($journalId) {
             // Fetch single journal
@@ -55,6 +57,30 @@ class FetchRss extends Command
             $this->info("Fetching RSS for {$journal->name}...");
             $result = $this->fetcher->fetchJournal($journal);
             $this->displayResult($journal->name, $result);
+        } elseif ($userId) {
+            // Fetch all journals for a specific user
+            $journals = Journal::where('user_id', $userId)->active()->get();
+            if ($journals->isEmpty()) {
+                $this->warn("No active journals found for user ID: {$userId}");
+                return Command::SUCCESS;
+            }
+
+            $this->info("Fetching RSS for {$journals->count()} journals (user: {$userId})...");
+            $this->newLine();
+
+            foreach ($journals as $journal) {
+                $this->info("  Fetching {$journal->name}...");
+                $result = $this->fetcher->fetchJournal($journal);
+
+                if ($result['status'] === 'success') {
+                    $this->info("    ✓ {$result['new_papers']} new papers");
+                } else {
+                    $this->error("    ✗ Error: {$result['error']}");
+                }
+            }
+
+            $this->newLine();
+            $this->info('RSS fetch completed!');
         } else {
             // Fetch all journals
             $journals = Journal::active()->get();

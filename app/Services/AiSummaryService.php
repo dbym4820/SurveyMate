@@ -216,10 +216,12 @@ PROMPT;
 
     private function callClaude(string $prompt, ?string $model = null): array
     {
-        // Use user's API key if available, otherwise fall back to system config
+        // Use user's API key if available, otherwise fall back to admin/system config
         $apiKey = null;
         if ($this->user && $this->user->hasClaudeApiKey()) {
             $apiKey = $this->user->claude_api_key;
+        } elseif (config('services.ai.admin_claude_api_key')) {
+            $apiKey = config('services.ai.admin_claude_api_key');
         } else {
             $apiKey = config('services.ai.claude_api_key');
         }
@@ -270,10 +272,12 @@ PROMPT;
 
     private function callOpenAI(string $prompt, ?string $model = null): array
     {
-        // Use user's API key if available, otherwise fall back to system config
+        // Use user's API key if available, otherwise fall back to admin/system config
         $apiKey = null;
         if ($this->user && $this->user->hasOpenaiApiKey()) {
             $apiKey = $this->user->openai_api_key;
+        } elseif (config('services.ai.admin_openai_api_key')) {
+            $apiKey = config('services.ai.admin_openai_api_key');
         } else {
             $apiKey = config('services.ai.openai_api_key');
         }
@@ -295,7 +299,7 @@ PROMPT;
         ];
 
         // Use max_completion_tokens for newer models, max_tokens for older ones
-        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+        if ($this->isNewOpenAIModel($model)) {
             $requestBody['max_completion_tokens'] = 2000;
         } else {
             $requestBody['max_tokens'] = 2000;
@@ -419,7 +423,7 @@ PROMPT;
         ];
 
         // Use max_completion_tokens for newer models, max_tokens for older ones
-        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+        if ($this->isNewOpenAIModel($model)) {
             $requestBody['max_completion_tokens'] = 4000;
         } else {
             $requestBody['max_tokens'] = 4000;
@@ -453,6 +457,22 @@ PROMPT;
     private function parseModelList(string $modelList): array
     {
         return array_values(array_filter(array_map('trim', explode(',', $modelList))));
+    }
+
+    /**
+     * Check if model uses new OpenAI API format (max_completion_tokens)
+     * Newer models like gpt-4o, gpt-4-turbo, o1, o3 use max_completion_tokens
+     * Older models like gpt-3.5-turbo use max_tokens
+     *
+     * @param string $model
+     * @return bool
+     */
+    private function isNewOpenAIModel(string $model): bool
+    {
+        // gpt-4o variants, gpt-4-turbo, and o-series models use max_completion_tokens
+        return strpos($model, 'gpt-4o') !== false
+            || strpos($model, 'gpt-4-turbo') !== false
+            || preg_match('/^o[0-9]/', $model) === 1;  // o1, o1-mini, o3, o3-mini, etc.
     }
 
     private function parseJsonResponse(string $content): array
@@ -648,7 +668,7 @@ CONTEXT;
             'messages' => $messages,
         ];
 
-        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+        if ($this->isNewOpenAIModel($model)) {
             $requestBody['max_completion_tokens'] = 1500;
         } else {
             $requestBody['max_tokens'] = 1500;
@@ -863,7 +883,7 @@ PROMPT;
             ],
         ];
 
-        if (strpos($model, 'gpt-4o') !== false || strpos($model, 'gpt-4-turbo') !== false) {
+        if ($this->isNewOpenAIModel($model)) {
             $requestBody['max_completion_tokens'] = 3000;
         } else {
             $requestBody['max_tokens'] = 3000;

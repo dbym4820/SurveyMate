@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\GeneratedRssController;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,7 +13,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Public RSS feed endpoint (no authentication required)
+Route::get('/rss/{feedToken}', [GeneratedRssController::class, 'serve'])
+    ->where('feedToken', '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}');
+
 // SPA - all routes go to the React app
 Route::get('/{any?}', function () {
     return view('app');
-})->where('any', '^(?!api).*$');
+})->where('any', '^(?!api|rss).*$');

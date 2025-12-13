@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Journal extends Model
 {
@@ -16,6 +17,7 @@ class Journal extends Model
         'user_id',
         'name',
         'rss_url',
+        'source_type',
         'color',
         'is_active',
         'last_fetched_at',
@@ -39,6 +41,19 @@ class Journal extends Model
     public function fetchLogs(): HasMany
     {
         return $this->hasMany(FetchLog::class);
+    }
+
+    public function generatedFeed(): HasOne
+    {
+        return $this->hasOne(GeneratedFeed::class);
+    }
+
+    /**
+     * Check if this journal uses AI-generated feed
+     */
+    public function isAiGenerated(): bool
+    {
+        return $this->source_type === 'ai_generated';
     }
 
     public function scopeActive($query)

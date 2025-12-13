@@ -1,0 +1,978 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Journal;
+use App\Models\GeneratedFeed;
+use App\Models\User;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use DOMDocument;
+use DOMXPath;
+
+class AiRssGeneratorService
+{
+    private const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+    private const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+    /** @var User|null */
+    private $user;
+
+    /**
+     * Set the user context for API key retrieval
+     */
+    public function setUser(User $user): self
+    {
+        $this->user = $user;
+        return $this;
+    }
+
+    /**
+     * Check if user has any AI API key configured
+     */
+    public function hasApiKey(): bool
+    {
+        if (!$this->user) {
+            return false;
+        }
+        return $this->user->hasClaudeApiKey() || $this->user->hasOpenaiApiKey();
+    }
+
+    /**
+     * Get preferred provider for the user
+     */
+    public function getPreferredProvider(): ?string
+    {
+        if (!$this->user) {
+            return null;
+        }
+
+        if ($this->user->preferred_ai_provider) {
+            if ($this->user->preferred_ai_provider === 'claude' && $this->user->hasClaudeApiKey()) {
+                return 'claude';
+            }
+            if ($this->user->preferred_ai_provider === 'openai' && $this->user->hasOpenaiApiKey()) {
+                return 'openai';
+            }
+        }
+
+        if ($this->user->hasOpenaiApiKey()) {
+            return 'openai';
+        }
+        if ($this->user->hasClaudeApiKey()) {
+            return 'claude';
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch web page content (raw HTML for selector-based parsing)
+     */
+    public function fetchWebPage(string $url, bool $clean = false): array
+    {
+        try {
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (compatible; SurveyMate/1.0; Academic Paper Aggregator)',
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language' => 'ja,en;q=0.9',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                return [
+                    'success' => false,
+                    'error' => 'HTTP error: ' . $response->status(),
+                ];
+            }
+
+            $html = $response->body();
+            $originalSize = strlen($html);
+
+            if ($clean) {
+                $html = $this->cleanHtmlForAi($html);
+            }
+
+            return [
+                'success' => true,
+                'html' => $html,
+                'original_size' => $originalSize,
+                'cleaned_size' => strlen($html),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch web page', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Clean HTML for AI analysis (reduce token usage)
+     */
+    private function cleanHtmlForAi(string $html): string
+    {
+        // Remove script, style, svg, noscript, iframe, and comment tags
+        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+        $html = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $html);
+        $html = preg_replace('/<svg\b[^>]*>.*?<\/svg>/is', '', $html);
+        $html = preg_replace('/<noscript\b[^>]*>.*?<\/noscript>/is', '', $html);
+        $html = preg_replace('/<iframe\b[^>]*>.*?<\/iframe>/is', '', $html);
+        $html = preg_replace('/<!--.*?-->/s', '', $html);
+
+        // Remove common non-content elements
+        $html = preg_replace('/<header\b[^>]*>.*?<\/header>/is', '', $html);
+        $html = preg_replace('/<footer\b[^>]*>.*?<\/footer>/is', '', $html);
+        $html = preg_replace('/<nav\b[^>]*>.*?<\/nav>/is', '', $html);
+
+        // Remove inline styles and event handlers
+        $html = preg_replace('/\s+style\s*=\s*"[^"]*"/i', '', $html);
+        $html = preg_replace('/\s+style\s*=\s*\'[^\']*\'/i', '', $html);
+        $html = preg_replace('/\s+on\w+\s*=\s*"[^"]*"/i', '', $html);
+        $html = preg_replace('/\s+on\w+\s*=\s*\'[^\']*\'/i', '', $html);
+
+        // Remove data attributes (often contain long base64 data)
+        $html = preg_replace('/\s+data-[a-z-]+\s*=\s*"[^"]*"/i', '', $html);
+        $html = preg_replace('/\s+data-[a-z-]+\s*=\s*\'[^\']*\'/i', '', $html);
+
+        // Collapse whitespace
+        $html = preg_replace('/\s+/', ' ', $html);
+
+        // Truncate to ~40,000 characters (~10,000 tokens for GPT)
+        // This leaves room for the prompt and response
+        if (strlen($html) > 40000) {
+            $html = substr($html, 0, 40000) . '... [truncated]';
+        }
+
+        return trim($html);
+    }
+
+    /**
+     * Analyze page structure using AI to extract CSS selectors
+     * This is only called once to learn the page structure
+     */
+    public function analyzePageStructure(string $html, string $url): array
+    {
+        $provider = $this->getPreferredProvider();
+        if (!$provider) {
+            return [
+                'success' => false,
+                'error' => 'No AI API key configured',
+            ];
+        }
+
+        $prompt = $this->buildStructureAnalysisPrompt($html, $url);
+
+        try {
+            if ($provider === 'claude') {
+                $result = $this->callClaudeForAnalysis($prompt);
+            } else {
+                $result = $this->callOpenAIForAnalysis($prompt);
+            }
+
+            // Validate selectors
+            if (empty($result['selectors'])) {
+                return [
+                    'success' => false,
+                    'error' => 'AI could not identify page structure',
+                ];
+            }
+
+            return [
+                'success' => true,
+                'selectors' => $result['selectors'] ?? [],
+                'sample_papers' => $result['sample_papers'] ?? [],
+                'provider' => $provider,
+            ];
+        } catch (\Exception $e) {
+            Log::error('AI structure analysis failed', [
+                'url' => $url,
+                'provider' => $provider,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Build prompt for structure analysis (focus on selectors, not content)
+     */
+    private function buildStructureAnalysisPrompt(string $html, string $url): string
+    {
+        return <<<PROMPT
+以下のHTMLは学術論文の一覧ページです．このページの構造を解析し，論文情報を抽出するためのCSSセレクタを特定してください．
+
+【URL】
+{$url}
+
+【HTML】
+{$html}
+
+以下のJSON形式で，ページ構造情報を返してください：
+{
+  "selectors": {
+    "paper_container": "各論文を含むコンテナ要素のCSSセレクタ（例：.article-list > .article-item）",
+    "title": "コンテナ内でのタイトル要素のCSSセレクタ（例：.article-title a）",
+    "title_attr": "タイトルテキストの取得方法（textContent または href などの属性名）",
+    "url": "論文URLを含む要素のCSSセレクタ（例：.article-title a）",
+    "url_attr": "URLの取得属性（通常は href）",
+    "authors": "著者要素のCSSセレクタ（なければnull）",
+    "authors_attr": "著者テキストの取得方法（textContent または属性名）",
+    "abstract": "概要要素のCSSセレクタ（なければnull）",
+    "date": "公開日要素のCSSセレクタ（なければnull）",
+    "date_format": "日付フォーマット（例：Y-m-d, Y年m月d日）"
+  },
+  "base_url": "相対URLを絶対URLに変換するためのベースURL",
+  "sample_papers": [
+    {
+      "title": "検出された論文タイトル（動作確認用，2-3件）",
+      "url": "論文URL"
+    }
+  ]
+}
+
+重要:
+- CSSセレクタは具体的かつ正確に記述してください
+- 複数のセレクタが考えられる場合は，最も安定して使えるものを選んでください
+- paper_containerは各論文が1つずつ含まれる最小の繰り返し要素を指定してください
+- 論文のみを対象とし，ニュース記事や告知は除外できるセレクタにしてください
+- JSON形式のみで回答し，他のテキストは含めないでください
+PROMPT;
+    }
+
+    /**
+     * Parse page using saved selectors (no AI needed)
+     */
+    public function parsePageWithSelectors(string $html, array $selectors, string $baseUrl): array
+    {
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+
+        $xpath = new DOMXPath($dom);
+
+        // Convert CSS selector to XPath (simplified conversion)
+        $containerXpath = $this->cssToXpath($selectors['paper_container'] ?? '');
+        if (empty($containerXpath)) {
+            return ['success' => false, 'error' => 'Invalid container selector'];
+        }
+
+        $papers = [];
+        $containers = $xpath->query($containerXpath);
+
+        if ($containers === false || $containers->length === 0) {
+            return ['success' => false, 'error' => 'No paper containers found'];
+        }
+
+        foreach ($containers as $container) {
+            $paper = $this->extractPaperFromContainer($xpath, $container, $selectors, $baseUrl);
+            if ($paper && !empty($paper['title'])) {
+                $papers[] = $paper;
+            }
+        }
+
+        return [
+            'success' => true,
+            'papers' => $papers,
+        ];
+    }
+
+    /**
+     * Extract paper data from a container element
+     */
+    private function extractPaperFromContainer(DOMXPath $xpath, \DOMNode $container, array $selectors, string $baseUrl): ?array
+    {
+        $paper = [
+            'title' => null,
+            'url' => null,
+            'authors' => [],
+            'abstract' => null,
+            'published_date' => null,
+        ];
+
+        // Extract title
+        if (!empty($selectors['title'])) {
+            $titleXpath = $this->cssToXpath($selectors['title'], true);
+            $titleNodes = $xpath->query($titleXpath, $container);
+            if ($titleNodes && $titleNodes->length > 0) {
+                $titleNode = $titleNodes->item(0);
+                $attr = $selectors['title_attr'] ?? 'textContent';
+                $paper['title'] = $attr === 'textContent'
+                    ? trim($titleNode->textContent)
+                    : trim($titleNode->getAttribute($attr));
+            }
+        }
+
+        // Extract URL
+        if (!empty($selectors['url'])) {
+            $urlXpath = $this->cssToXpath($selectors['url'], true);
+            $urlNodes = $xpath->query($urlXpath, $container);
+            if ($urlNodes && $urlNodes->length > 0) {
+                $urlNode = $urlNodes->item(0);
+                $attr = $selectors['url_attr'] ?? 'href';
+                $url = trim($urlNode->getAttribute($attr));
+                $paper['url'] = $this->resolveUrl($url, $baseUrl);
+            }
+        }
+
+        // Extract authors
+        if (!empty($selectors['authors'])) {
+            $authorsXpath = $this->cssToXpath($selectors['authors'], true);
+            $authorsNodes = $xpath->query($authorsXpath, $container);
+            if ($authorsNodes && $authorsNodes->length > 0) {
+                $authorsNode = $authorsNodes->item(0);
+                $attr = $selectors['authors_attr'] ?? 'textContent';
+                $authorsText = $attr === 'textContent'
+                    ? trim($authorsNode->textContent)
+                    : trim($authorsNode->getAttribute($attr));
+                // Split authors by common delimiters
+                $paper['authors'] = array_filter(array_map('trim', preg_split('/[,;，、]/', $authorsText)));
+            }
+        }
+
+        // Extract abstract
+        if (!empty($selectors['abstract'])) {
+            $abstractXpath = $this->cssToXpath($selectors['abstract'], true);
+            $abstractNodes = $xpath->query($abstractXpath, $container);
+            if ($abstractNodes && $abstractNodes->length > 0) {
+                $paper['abstract'] = trim($abstractNodes->item(0)->textContent);
+            }
+        }
+
+        // Extract date
+        if (!empty($selectors['date'])) {
+            $dateXpath = $this->cssToXpath($selectors['date'], true);
+            $dateNodes = $xpath->query($dateXpath, $container);
+            if ($dateNodes && $dateNodes->length > 0) {
+                $dateText = trim($dateNodes->item(0)->textContent);
+                $paper['published_date'] = $this->parseDate($dateText);
+            }
+        }
+
+        return $paper;
+    }
+
+    /**
+     * CSS selector to XPath converter
+     * Handles: element, .class, #id, [attr], element.class, .class1.class2, parent > child, ancestor descendant
+     */
+    private function cssToXpath(string $css, bool $relative = false): string
+    {
+        if (empty($css)) {
+            return '';
+        }
+
+        $css = trim($css);
+        $prefix = $relative ? './' : '/';
+
+        // Split by descendant combinator (space) and child combinator (>)
+        // Preserve the combinator type for proper XPath generation
+        $parts = preg_split('/(\s*>\s*|\s+)/', $css, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+        $xpath = $prefix;
+        $isFirst = true;
+
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if (empty($part)) {
+                continue;
+            }
+
+            // Check if this is a child combinator (>)
+            if ($part === '>' || preg_match('/^\s*>\s*$/', $part)) {
+                $xpath .= '/';
+                continue;
+            }
+
+            // Check if this is a descendant combinator (space only)
+            // After splitting, a space-only part means descendant
+            if (preg_match('/^\s+$/', $part)) {
+                $xpath .= '//';
+                continue;
+            }
+
+            // Convert the selector part to XPath
+            $converted = $this->convertSelectorPart($part);
+
+            if ($isFirst) {
+                $xpath .= '/' . $converted;
+                $isFirst = false;
+            } else {
+                $xpath .= $converted;
+            }
+        }
+
+        return $xpath;
+    }
+
+    /**
+     * Convert a single CSS selector part (element, .class, #id, etc.) to XPath
+     */
+    private function convertSelectorPart(string $selector): string
+    {
+        $element = '*';
+        $predicates = [];
+
+        // Extract element name if present at the start
+        if (preg_match('/^([a-zA-Z][a-zA-Z0-9]*)(\.|\#|\[|$)/', $selector, $m)) {
+            $element = $m[1];
+            $selector = substr($selector, strlen($m[1]));
+        }
+
+        // Extract all classes
+        preg_match_all('/\.([a-zA-Z0-9_-]+)/', $selector, $classes);
+        foreach ($classes[1] as $class) {
+            $predicates[] = 'contains(@class, "' . $class . '")';
+        }
+
+        // Extract all IDs
+        preg_match_all('/#([a-zA-Z0-9_-]+)/', $selector, $ids);
+        foreach ($ids[1] as $id) {
+            $predicates[] = '@id="' . $id . '"';
+        }
+
+        // Extract attribute selectors [attr] or [attr=value]
+        preg_match_all('/\[([a-zA-Z0-9_-]+)(?:=(["\']?)([^"\'\]]+)\2)?\]/', $selector, $attrs, PREG_SET_ORDER);
+        foreach ($attrs as $attr) {
+            if (isset($attr[3])) {
+                $predicates[] = '@' . $attr[1] . '="' . $attr[3] . '"';
+            } else {
+                $predicates[] = '@' . $attr[1];
+            }
+        }
+
+        $result = $element;
+        if (!empty($predicates)) {
+            $result .= '[' . implode(' and ', $predicates) . ']';
+        }
+
+        return $result;
+    }
+
+    /**
+     * Resolve relative URL to absolute
+     */
+    private function resolveUrl(string $url, string $baseUrl): string
+    {
+        if (empty($url)) {
+            return '';
+        }
+
+        // Already absolute
+        if (preg_match('/^https?:\/\//i', $url)) {
+            return $url;
+        }
+
+        $base = parse_url($baseUrl);
+        $scheme = $base['scheme'] ?? 'https';
+        $host = $base['host'] ?? '';
+
+        if (strpos($url, '//') === 0) {
+            return $scheme . ':' . $url;
+        }
+
+        if (strpos($url, '/') === 0) {
+            return $scheme . '://' . $host . $url;
+        }
+
+        // Relative path
+        $basePath = $base['path'] ?? '/';
+        $basePath = dirname($basePath);
+        return $scheme . '://' . $host . $basePath . '/' . $url;
+    }
+
+    /**
+     * Parse various date formats
+     */
+    private function parseDate(string $dateText): ?string
+    {
+        if (empty($dateText)) {
+            return null;
+        }
+
+        // Try various formats
+        $formats = [
+            'Y-m-d',
+            'Y/m/d',
+            'Y年m月d日',
+            'd M Y',
+            'M d, Y',
+            'F d, Y',
+        ];
+
+        foreach ($formats as $format) {
+            $date = \DateTime::createFromFormat($format, $dateText);
+            if ($date) {
+                return $date->format('Y-m-d');
+            }
+        }
+
+        // Try strtotime as fallback
+        $timestamp = strtotime($dateText);
+        if ($timestamp) {
+            return date('Y-m-d', $timestamp);
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if model uses new OpenAI API format (max_completion_tokens)
+     */
+    private function isNewOpenAIModel(string $model): bool
+    {
+        return strpos($model, 'gpt-4o') !== false
+            || strpos($model, 'gpt-4-turbo') !== false
+            || preg_match('/^o[0-9]/', $model) === 1;
+    }
+
+    /**
+     * Call Claude API for structure analysis
+     */
+    private function callClaudeForAnalysis(string $prompt): array
+    {
+        // Use user's API key if available, otherwise fall back to admin/system config
+        $apiKey = null;
+        if ($this->user && $this->user->hasClaudeApiKey()) {
+            $apiKey = $this->user->claude_api_key;
+        } elseif (config('services.ai.admin_claude_api_key')) {
+            $apiKey = config('services.ai.admin_claude_api_key');
+        } else {
+            $apiKey = config('services.ai.claude_api_key');
+        }
+
+        if (!$apiKey) {
+            throw new \Exception('Claude API key is not configured');
+        }
+
+        $model = $this->user->preferred_claude_model ?? config('services.ai.claude_default_model', 'claude-sonnet-4-20250514');
+
+        $response = Http::withHeaders([
+            'x-api-key' => $apiKey,
+            'anthropic-version' => '2023-06-01',
+            'Content-Type' => 'application/json',
+        ])->timeout(120)->post(self::CLAUDE_API_URL, [
+            'model' => $model,
+            'max_tokens' => 4000,
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ]);
+
+        if (!$response->successful()) {
+            throw new \Exception('Claude API request failed: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $content = $data['content'][0]['text'] ?? '';
+
+        return $this->parseJsonResponse($content);
+    }
+
+    /**
+     * Call OpenAI API for structure analysis
+     */
+    private function callOpenAIForAnalysis(string $prompt): array
+    {
+        // Use user's API key if available, otherwise fall back to admin/system config
+        $apiKey = null;
+        if ($this->user && $this->user->hasOpenaiApiKey()) {
+            $apiKey = $this->user->openai_api_key;
+        } elseif (config('services.ai.admin_openai_api_key')) {
+            $apiKey = config('services.ai.admin_openai_api_key');
+        } else {
+            $apiKey = config('services.ai.openai_api_key');
+        }
+
+        if (!$apiKey) {
+            throw new \Exception('OpenAI API key is not configured');
+        }
+
+        $model = $this->user->preferred_openai_model ?? config('services.ai.openai_default_model', 'gpt-4o');
+
+        // For page structure analysis, we need a model with large context
+        // gpt-3.5-turbo only has 16k context which is often not enough
+        // Automatically upgrade to gpt-4o-mini (128k context) for this task
+        if ($model === 'gpt-3.5-turbo') {
+            $model = 'gpt-4o-mini';
+            Log::info('Upgraded model to gpt-4o-mini for RSS page analysis (gpt-3.5-turbo context too small)');
+        }
+
+        $requestBody = [
+            'model' => $model,
+            'temperature' => 0.1,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are an expert at analyzing HTML page structures and identifying CSS selectors for web scraping. Always respond in valid JSON format.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+
+        if ($this->isNewOpenAIModel($model)) {
+            $requestBody['max_completion_tokens'] = 4000;
+        } else {
+            $requestBody['max_tokens'] = 4000;
+        }
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(120)->post(self::OPENAI_API_URL, $requestBody);
+
+        if (!$response->successful()) {
+            throw new \Exception('OpenAI API request failed: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $content = $data['choices'][0]['message']['content'] ?? '';
+
+        return $this->parseJsonResponse($content);
+    }
+
+    /**
+     * Parse JSON response from AI
+     */
+    private function parseJsonResponse(string $content): array
+    {
+        $content = preg_replace('/^```json\s*/i', '', $content);
+        $content = preg_replace('/\s*```$/i', '', $content);
+        $content = trim($content);
+
+        try {
+            $parsed = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($parsed) ? $parsed : [];
+        } catch (\JsonException $e) {
+            Log::warning('Failed to parse AI response as JSON', [
+                'content' => $content,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Generate RSS XML from extracted papers
+     */
+    public function generateRssXml(array $papers, Journal $journal, string $sourceUrl): string
+    {
+        $pubDate = date('r');
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $xml .= '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">' . "\n";
+        $xml .= '<channel>' . "\n";
+        $xml .= '  <title>' . htmlspecialchars($journal->name) . '</title>' . "\n";
+        $xml .= '  <link>' . htmlspecialchars($sourceUrl) . '</link>' . "\n";
+        $xml .= '  <description>Auto-generated RSS feed for ' . htmlspecialchars($journal->name) . '</description>' . "\n";
+        $xml .= '  <language>ja</language>' . "\n";
+        $xml .= '  <lastBuildDate>' . $pubDate . '</lastBuildDate>' . "\n";
+        $xml .= '  <generator>SurveyMate RSS Generator</generator>' . "\n";
+
+        foreach ($papers as $paper) {
+            $title = htmlspecialchars($paper['title'] ?? 'Untitled');
+            $link = htmlspecialchars($paper['url'] ?? $sourceUrl);
+            $description = htmlspecialchars($paper['abstract'] ?? '');
+            $authors = is_array($paper['authors'] ?? null) ? implode(', ', $paper['authors']) : '';
+            $pubDateItem = !empty($paper['published_date'])
+                ? date('r', strtotime($paper['published_date']))
+                : $pubDate;
+
+            $xml .= '  <item>' . "\n";
+            $xml .= '    <title>' . $title . '</title>' . "\n";
+            $xml .= '    <link>' . $link . '</link>' . "\n";
+            if ($description) {
+                $xml .= '    <description>' . $description . '</description>' . "\n";
+            }
+            if ($authors) {
+                $xml .= '    <author>' . htmlspecialchars($authors) . '</author>' . "\n";
+            }
+            $xml .= '    <pubDate>' . $pubDateItem . '</pubDate>' . "\n";
+            $xml .= '    <guid isPermaLink="true">' . $link . '</guid>' . "\n";
+            $xml .= '  </item>' . "\n";
+        }
+
+        $xml .= '</channel>' . "\n";
+        $xml .= '</rss>';
+
+        return $xml;
+    }
+
+    /**
+     * Test fetching feed using saved selectors (no AI)
+     * Returns paper count without generating/storing RSS
+     */
+    public function fetchFeed(Journal $journal): array
+    {
+        $feed = GeneratedFeed::where('journal_id', $journal->id)->first();
+
+        if (!$feed) {
+            return [
+                'success' => false,
+                'error' => 'No feed configuration found. Please run initial setup.',
+            ];
+        }
+
+        $selectors = $feed->extraction_config['selectors'] ?? null;
+        $baseUrl = $feed->extraction_config['base_url'] ?? $journal->rss_url;
+
+        if (empty($selectors) || empty($selectors['paper_container'])) {
+            return [
+                'success' => false,
+                'error' => 'No selectors configured. Please reanalyze page structure.',
+            ];
+        }
+
+        // Fetch page (raw HTML, no cleaning needed for selector parsing)
+        $pageResult = $this->fetchWebPage($journal->rss_url, false);
+        if (!$pageResult['success']) {
+            return [
+                'success' => false,
+                'error' => 'Failed to fetch page: ' . ($pageResult['error'] ?? 'Unknown error'),
+            ];
+        }
+
+        // Parse using selectors
+        $parseResult = $this->parsePageWithSelectors($pageResult['html'], $selectors, $baseUrl);
+        if (!$parseResult['success']) {
+            return [
+                'success' => false,
+                'error' => 'Failed to parse page: ' . ($parseResult['error'] ?? 'Unknown error'),
+            ];
+        }
+
+        $papers = $parseResult['papers'] ?? [];
+        if (empty($papers)) {
+            return [
+                'success' => false,
+                'error' => 'No papers found. Page structure may have changed.',
+            ];
+        }
+
+        // Update feed status (but NOT rss_xml - that's generated dynamically)
+        $feed->update([
+            'generation_status' => 'success',
+            'last_generated_at' => now(),
+            'error_message' => null,
+        ]);
+
+        return [
+            'success' => true,
+            'papers_count' => count($papers),
+            'feed_token' => $feed->feed_token,
+            'method' => 'selector',
+        ];
+    }
+
+    /**
+     * Generate RSS XML dynamically for serving (called on every RSS request)
+     * This does NOT store the result - it's generated fresh each time
+     */
+    public function generateRssDynamically(GeneratedFeed $feed): string
+    {
+        $journal = $feed->journal;
+        $selectors = $feed->extraction_config['selectors'] ?? null;
+        $baseUrl = $feed->extraction_config['base_url'] ?? $feed->source_url;
+
+        if (empty($selectors) || empty($selectors['paper_container'])) {
+            throw new \Exception('No selectors configured');
+        }
+
+        // Fetch the source page
+        $pageResult = $this->fetchWebPage($feed->source_url, false);
+        if (!$pageResult['success']) {
+            throw new \Exception('Failed to fetch source page: ' . ($pageResult['error'] ?? 'Unknown error'));
+        }
+
+        // Parse using saved selectors
+        $parseResult = $this->parsePageWithSelectors($pageResult['html'], $selectors, $baseUrl);
+        if (!$parseResult['success']) {
+            throw new \Exception('Failed to parse page: ' . ($parseResult['error'] ?? 'Unknown error'));
+        }
+
+        $papers = $parseResult['papers'] ?? [];
+        if (empty($papers)) {
+            throw new \Exception('No papers found. Page structure may have changed.');
+        }
+
+        // Generate RSS XML dynamically
+        return $this->generateRssXml($papers, $journal, $feed->source_url);
+    }
+
+    /**
+     * Initial feed setup with AI structure analysis
+     */
+    public function setupFeed(Journal $journal, User $user): array
+    {
+        $this->setUser($user);
+
+        if (!$this->hasApiKey()) {
+            return [
+                'success' => false,
+                'error' => 'No AI API key configured. Please set your API key in Settings.',
+            ];
+        }
+
+        // Get or create GeneratedFeed record
+        $feed = GeneratedFeed::firstOrNew(['journal_id' => $journal->id]);
+        $feed->user_id = $user->id;
+        $feed->source_url = $journal->rss_url;
+        $feed->ai_provider = $this->getPreferredProvider();
+        $feed->ai_model = $feed->ai_provider === 'claude'
+            ? ($user->preferred_claude_model ?? config('services.ai.claude_default_model'))
+            : ($user->preferred_openai_model ?? config('services.ai.openai_default_model'));
+        $feed->generation_status = 'pending';
+        $feed->save();
+
+        // Fetch page (cleaned for AI)
+        $pageResult = $this->fetchWebPage($journal->rss_url, true);
+        if (!$pageResult['success']) {
+            $feed->markAsError('Failed to fetch page: ' . ($pageResult['error'] ?? 'Unknown error'));
+            return [
+                'success' => false,
+                'error' => $pageResult['error'],
+            ];
+        }
+
+        // Analyze structure with AI
+        $analysisResult = $this->analyzePageStructure($pageResult['html'], $journal->rss_url);
+        if (!$analysisResult['success']) {
+            $feed->markAsError('AI analysis failed: ' . ($analysisResult['error'] ?? 'Unknown error'));
+            return [
+                'success' => false,
+                'error' => $analysisResult['error'],
+            ];
+        }
+
+        // Save selectors to extraction_config
+        $extractionConfig = [
+            'selectors' => $analysisResult['selectors'],
+            'base_url' => $analysisResult['selectors']['base_url'] ?? $journal->rss_url,
+            'analyzed_at' => now()->toISOString(),
+            'ai_provider' => $analysisResult['provider'],
+        ];
+
+        // Now fetch using the new selectors to generate initial RSS
+        $pageResultRaw = $this->fetchWebPage($journal->rss_url, false);
+        if (!$pageResultRaw['success']) {
+            $feed->markAsError('Failed to fetch page for parsing');
+            return ['success' => false, 'error' => 'Failed to fetch page'];
+        }
+
+        $parseResult = $this->parsePageWithSelectors(
+            $pageResultRaw['html'],
+            $analysisResult['selectors'],
+            $extractionConfig['base_url']
+        );
+
+        if (!$parseResult['success'] || empty($parseResult['papers'])) {
+            // Fall back to sample papers from AI if direct parsing fails
+            $papers = $analysisResult['sample_papers'] ?? [];
+            if (empty($papers)) {
+                $feed->markAsError('Could not extract papers with detected selectors');
+                return [
+                    'success' => false,
+                    'error' => 'Could not extract papers with detected selectors',
+                ];
+            }
+        } else {
+            $papers = $parseResult['papers'];
+        }
+
+        // Save only the selectors (NOT the RSS XML - that's generated dynamically on each request)
+        $feed->update([
+            'extraction_config' => $extractionConfig,
+            'generation_status' => 'success',
+            'last_generated_at' => now(),
+            'error_message' => null,
+            'rss_xml' => null,  // Clear any old cached XML
+        ]);
+
+        return [
+            'success' => true,
+            'papers_count' => count($papers),
+            'feed_token' => $feed->feed_token,
+            'provider' => $analysisResult['provider'],
+            'method' => 'ai_setup',
+        ];
+    }
+
+    /**
+     * Generate feed - uses selectors if available, otherwise runs AI setup
+     */
+    public function generateFeed(Journal $journal, User $user): array
+    {
+        $feed = GeneratedFeed::where('journal_id', $journal->id)->first();
+
+        // If we have valid selectors, use them
+        if ($feed && !empty($feed->extraction_config['selectors'])) {
+            return $this->fetchFeed($journal);
+        }
+
+        // Otherwise, run initial AI setup
+        return $this->setupFeed($journal, $user);
+    }
+
+    /**
+     * Force reanalyze page structure with AI
+     */
+    public function reanalyzeStructure(Journal $journal, User $user): array
+    {
+        // Delete existing config to force full re-setup
+        $feed = GeneratedFeed::where('journal_id', $journal->id)->first();
+        if ($feed) {
+            $feed->update(['extraction_config' => null]);
+        }
+
+        return $this->setupFeed($journal, $user);
+    }
+
+    /**
+     * Test page analysis without saving (for preview)
+     */
+    public function testPageAnalysis(string $url, User $user): array
+    {
+        $this->setUser($user);
+
+        if (!$this->hasApiKey()) {
+            return [
+                'success' => false,
+                'error' => 'No AI API key configured. Please set your API key in Settings.',
+            ];
+        }
+
+        // Fetch and analyze
+        $pageResult = $this->fetchWebPage($url, true);
+        if (!$pageResult['success']) {
+            return [
+                'success' => false,
+                'error' => 'Failed to fetch page: ' . ($pageResult['error'] ?? 'Unknown error'),
+            ];
+        }
+
+        $analysisResult = $this->analyzePageStructure($pageResult['html'], $url);
+        if (!$analysisResult['success']) {
+            return [
+                'success' => false,
+                'error' => 'AI analysis failed: ' . ($analysisResult['error'] ?? 'Unknown error'),
+            ];
+        }
+
+        return [
+            'success' => true,
+            'selectors' => $analysisResult['selectors'] ?? [],
+            'sample_papers' => $analysisResult['sample_papers'] ?? [],
+            'provider' => $analysisResult['provider'],
+            'page_size' => [
+                'original' => $pageResult['original_size'],
+                'cleaned' => $pageResult['cleaned_size'],
+            ],
+        ];
+    }
+}
