@@ -145,7 +145,33 @@ PROMPT;
             $prompt .= $perspectivePrompt;
         }
 
-        $prompt .= <<<PROMPT
+        // ユーザーの要約テンプレートを取得
+        $summaryTemplate = $this->user ? $this->user->summary_template : null;
+
+        if (!empty($summaryTemplate)) {
+            // ユーザー定義のテンプレートがある場合はそれを使用
+            $prompt .= <<<PROMPT
+
+【要約形式の指定】
+{$summaryTemplate}
+
+上記の指定に従って要約を作成し，以下の形式のJSONで回答してください：
+{
+  "summary_text": "指定された形式に従った要約全文",
+  "purpose": "研究目的（1〜2文，抽出できる場合）",
+  "methodology": "研究手法（1〜2文，抽出できる場合）",
+  "findings": "主な発見・結果（2〜3文，抽出できる場合）",
+  "implications": "示唆・実践的意義（1文，抽出できる場合）"
+}
+
+重要:
+- JSON形式のみで回答し，他のテキストは含めないでください．
+- summary_text には指定された形式に従った完全な要約を含めてください．
+- 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
+PROMPT;
+        } else {
+            // デフォルトの形式
+            $prompt .= <<<PROMPT
 以下の形式のJSONで回答してください：
 {
   "summary_text": "論文全体の要約（3〜4文）",
@@ -159,6 +185,7 @@ PROMPT;
 - JSON形式のみで回答し，他のテキストは含めないでください．
 - 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
 PROMPT;
+        }
 
         return $prompt;
     }
