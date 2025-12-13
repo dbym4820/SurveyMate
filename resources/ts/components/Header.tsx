@@ -55,53 +55,57 @@ export default function Header({
           </div>
 
           {/* Desktop Actions */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-1 lg:gap-3">
             <button
               onClick={() => onNavigate('papers')}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+              title="Home"
+              className={`flex items-center gap-2 px-3 lg:px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'papers'
                   ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
               <Home className="w-4 h-4" />
-              Home
+              <span className="hidden lg:inline">Home</span>
             </button>
 
             {user.hasAnyApiKey && (
               <button
                 onClick={() => onNavigate('trends')}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                title="トレンド"
+                className={`flex items-center gap-2 px-3 lg:px-4 py-2 border rounded-lg transition-colors ${
                   currentPage === 'trends'
                     ? 'border-gray-500 bg-gray-50 text-gray-700'
                     : 'border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 <TrendingUp className="w-4 h-4" />
-                トレンド
+                <span className="hidden lg:inline">トレンド</span>
               </button>
             )}
 
             <button
               onClick={() => onNavigate('tags')}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+              title="Tagグループ"
+              className={`flex items-center gap-2 px-3 lg:px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'tags'
                   ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
               <Tag className="w-4 h-4" />
-              Tagグループ
+              <span className="hidden lg:inline">Tagグループ</span>
             </button>
 
             {onManualFetch && (
               <button
                 onClick={onManualFetch}
                 disabled={isRefreshing}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                title={isRefreshing ? '取得中...' : 'フィード取得'}
+                className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? '取得中...' : 'フィード取得'}
+                <span className="hidden lg:inline">{isRefreshing ? '取得中...' : 'フィード取得'}</span>
               </button>
             )}
 
@@ -109,12 +113,13 @@ export default function Header({
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                title={user.username}
+                className="flex items-center gap-1 lg:gap-2 px-2 lg:px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 <UserIcon className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">{user.username}</span>
+                <span className="hidden lg:inline text-sm font-medium text-gray-700">{user.username}</span>
                 {user.isAdmin && (
-                  <span className="text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
+                  <span className="hidden lg:inline text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
                     管理者
                   </span>
                 )}
