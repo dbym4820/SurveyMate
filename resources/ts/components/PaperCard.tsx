@@ -708,7 +708,7 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                 className="flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-600 transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">論文を開く</span>
+                <span className="hidden sm:inline">論文のページを開く</span>
                 <span className="sm:hidden">開く</span>
               </a>
             </div>
@@ -1155,7 +1155,7 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                 className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                元の論文を開く
+                元の論文のページを開く
               </a>
             </div>
           </div>
