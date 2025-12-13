@@ -22,7 +22,7 @@ class SyncAdminApiKeys extends Command
      *
      * @var string
      */
-    protected $description = '.envの管理者設定（APIキー，調査観点，要約テンプレート，デフォルトジャーナル）を管理者ユーザーに同期';
+    protected $description = '管理者設定（APIキー，調査観点，要約テンプレート，デフォルトジャーナル）を管理者ユーザーに同期';
 
     /**
      * Execute the console command.
@@ -65,10 +65,10 @@ class SyncAdminApiKeys extends Command
 
         // --keys-only オプションが指定されていなければ，調査観点と要約テンプレートも同期
         if (!$this->option('keys-only')) {
-            $researchFields = env('DEFAULT_RESEARCH_FIELDS', '');
-            $summaryPerspective = env('DEFAULT_SUMMARY_PERSPECTIVE', '');
-            $readingFocus = env('DEFAULT_READING_FOCUS', '');
-            $summaryTemplate = env('DEFAULT_SUMMARY_TEMPLATE', '');
+            $researchFields = config('surveymate.defaults.research_fields', '');
+            $summaryPerspective = config('surveymate.defaults.summary_perspective', '');
+            $readingFocus = config('surveymate.defaults.reading_focus', '');
+            $summaryTemplate = config('surveymate.defaults.summary_template', '');
 
             // 調査観点設定
             if (!empty($researchFields) || !empty($summaryPerspective) || !empty($readingFocus)) {

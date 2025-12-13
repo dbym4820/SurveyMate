@@ -78,15 +78,23 @@ return [
     |--------------------------------------------------------------------------
     |
     | デフォルトの要約テンプレートと調査観点設定
-    | .env で設定可能（ダブルクォートで囲んで複数行記述可）
+    | config/generative_ai_settings/*.txt で管理（Git管理可能）
     |
     */
 
     'defaults' => [
-        'summary_template' => env('DEFAULT_SUMMARY_TEMPLATE', ''),
-        'research_fields' => env('DEFAULT_RESEARCH_FIELDS', ''),
-        'summary_perspective' => env('DEFAULT_SUMMARY_PERSPECTIVE', ''),
-        'reading_focus' => env('DEFAULT_READING_FOCUS', ''),
+        'summary_template' => file_exists(config_path('generative_ai_settings/summary_template.txt'))
+            ? trim(file_get_contents(config_path('generative_ai_settings/summary_template.txt')))
+            : '',
+        'research_fields' => file_exists(config_path('generative_ai_settings/research_fields.txt'))
+            ? trim(file_get_contents(config_path('generative_ai_settings/research_fields.txt')))
+            : '',
+        'summary_perspective' => file_exists(config_path('generative_ai_settings/summary_perspective.txt'))
+            ? trim(file_get_contents(config_path('generative_ai_settings/summary_perspective.txt')))
+            : '',
+        'reading_focus' => file_exists(config_path('generative_ai_settings/reading_focus.txt'))
+            ? trim(file_get_contents(config_path('generative_ai_settings/reading_focus.txt')))
+            : '',
     ],
 
 ];
