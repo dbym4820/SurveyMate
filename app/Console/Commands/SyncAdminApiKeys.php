@@ -3,7 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Models\Journal;
+use App\Services\RssFetcherService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class SyncAdminApiKeys extends Command
 {
@@ -12,14 +15,14 @@ class SyncAdminApiKeys extends Command
      *
      * @var string
      */
-    protected $signature = 'admin:sync-settings {--keys-only : APIキーのみ同期}';
+    protected $signature = 'admin:sync-settings {--keys-only : APIキーのみ同期} {--skip-journals : デフォルトジャーナル設定をスキップ}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = '.envの管理者設定（APIキー，調査観点，要約テンプレート）を管理者ユーザーに同期';
+    protected $description = '.envの管理者設定（APIキー，調査観点，要約テンプレート，デフォルトジャーナル）を管理者ユーザーに同期';
 
     /**
      * Execute the console command.
@@ -84,14 +87,82 @@ class SyncAdminApiKeys extends Command
             }
         }
 
-        if (empty($updated)) {
+        if (!empty($updated)) {
+            $admin->save();
+            $this->info('管理者ユーザーに以下の設定を同期しました: ' . implode(', ', $updated));
+        } else {
             $this->warn('.env に同期する設定が見つかりませんでした');
-            return Command::SUCCESS;
         }
 
-        $admin->save();
+        // デフォルトジャーナルの設定
+        if (!$this->option('keys-only') && !$this->option('skip-journals')) {
+            $journalResult = $this->syncDefaultJournals($admin);
+            if ($journalResult > 0) {
+                $this->info("デフォルトジャーナル {$journalResult} 件を設定しました");
+            }
+        }
 
-        $this->info('管理者ユーザーに以下の設定を同期しました: ' . implode(', ', $updated));
         return Command::SUCCESS;
+    }
+
+    /**
+     * 管理者ユーザーにデフォルトジャーナルを設定
+     */
+    private function syncDefaultJournals(User $admin): int
+    {
+        $defaultJournals = config('surveymate.default_journals', []);
+
+        if (empty($defaultJournals)) {
+            $this->line('デフォルトジャーナルは設定されていません（DEFAULT_JOURNALS 環境変数）');
+            return 0;
+        }
+
+        $rssFetcherService = app(RssFetcherService::class);
+        $createdCount = 0;
+
+        foreach ($defaultJournals as $journalConfig) {
+            $name = $journalConfig['name'];
+            // IDは正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
+            $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name));
+            $journalId = $baseId . '-' . $admin->id;
+
+            // 既に同じIDの論文誌が存在する場合はスキップ
+            if (Journal::where('id', $journalId)->exists()) {
+                $this->line("  スキップ（既存）: {$name}");
+                continue;
+            }
+
+            // 同じ名前の論文誌が存在する場合もスキップ
+            if (Journal::where('user_id', $admin->id)->where('name', $name)->exists()) {
+                $this->line("  スキップ（同名）: {$name}");
+                continue;
+            }
+
+            $journal = Journal::create([
+                'id' => $journalId,
+                'user_id' => $admin->id,
+                'name' => $name,
+                'rss_url' => $journalConfig['rss_url'],
+                'color' => $journalConfig['color'] ?? 'bg-gray-500',
+                'is_active' => true,
+            ]);
+
+            $this->line("  作成: {$name}");
+            Log::info("Created journal {$journal->name} for admin user {$admin->user_id}");
+            $createdCount++;
+
+            // 初回RSS取得を実行
+            try {
+                $result = $rssFetcherService->fetchJournal($journal);
+                $fetchedCount = $result['new'] ?? 0;
+                $this->line("    RSS取得: {$fetchedCount} 件の新規論文");
+                Log::info("Fetched RSS for {$journal->name}: " . json_encode($result));
+            } catch (\Exception $e) {
+                $this->warn("    RSS取得失敗: " . $e->getMessage());
+                Log::warning("初回RSS取得に失敗: {$journal->name}", ['error' => $e->getMessage()]);
+            }
+        }
+
+        return $createdCount;
     }
 }

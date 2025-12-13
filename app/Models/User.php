@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
@@ -46,11 +45,6 @@ class User extends Model
     public function sessions(): HasMany
     {
         return $this->hasMany(Session::class);
-    }
-
-    public function preferences(): HasOne
-    {
-        return $this->hasOne(UserPreference::class);
     }
 
     public function journals(): HasMany
