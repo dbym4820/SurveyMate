@@ -13,7 +13,10 @@ return new class extends Migration
      * .envで指定された管理者ユーザーを作成
      * ADMIN_CLAUDE_API_KEY / ADMIN_OPENAI_API_KEY が設定されていれば
      * 管理者ユーザーのAPIキーとして自動設定
-     * DEFAULT_* で調査観点や要約テンプレートも設定
+     *
+     * 注: research_perspective, summary_template, initial_setup_completed は
+     * 後続のマイグレーションで追加されるカラムのため，ここでは設定しない．
+     * これらは php artisan admin:sync-settings で同期する．
      */
     public function up(): void
     {
@@ -31,12 +34,6 @@ return new class extends Migration
         $claudeApiKey = env('ADMIN_CLAUDE_API_KEY');
         $openaiApiKey = env('ADMIN_OPENAI_API_KEY');
 
-        // デフォルトの調査観点・要約テンプレートを取得
-        $researchFields = env('DEFAULT_RESEARCH_FIELDS', '');
-        $summaryPerspective = env('DEFAULT_SUMMARY_PERSPECTIVE', '');
-        $readingFocus = env('DEFAULT_READING_FOCUS', '');
-        $summaryTemplate = env('DEFAULT_SUMMARY_TEMPLATE', '');
-
         $userData = [
             'user_id' => $adminUserId,
             'username' => $adminUsername,
@@ -44,7 +41,6 @@ return new class extends Migration
             'email' => $adminEmail,
             'is_admin' => true,
             'is_active' => true,
-            'initial_setup_completed' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ];
@@ -60,20 +56,6 @@ return new class extends Migration
             if (empty($claudeApiKey)) {
                 $userData['preferred_ai_provider'] = 'openai';
             }
-        }
-
-        // 調査観点設定（いずれかが設定されていれば保存）
-        if (!empty($researchFields) || !empty($summaryPerspective) || !empty($readingFocus)) {
-            $userData['research_perspective'] = json_encode([
-                'research_fields' => $researchFields,
-                'summary_perspective' => $summaryPerspective,
-                'reading_focus' => $readingFocus,
-            ]);
-        }
-
-        // 要約テンプレート
-        if (!empty($summaryTemplate)) {
-            $userData['summary_template'] = $summaryTemplate;
         }
 
         // 既存ユーザーがいなければ作成
