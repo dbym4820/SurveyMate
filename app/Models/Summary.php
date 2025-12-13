@@ -20,6 +20,7 @@ class Summary extends Model
         'implications',
         'tokens_used',
         'generation_time_ms',
+        'created_at',
     ];
 
     protected $casts = [

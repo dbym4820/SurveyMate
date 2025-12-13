@@ -96,6 +96,7 @@ class SummaryController extends Controller
                 'implications' => $result['implications'] ?? null,
                 'tokens_used' => $result['tokens_used'] ?? null,
                 'generation_time_ms' => $result['generation_time_ms'] ?? null,
+                'created_at' => now(),
             ]);
 
             return response()->json([

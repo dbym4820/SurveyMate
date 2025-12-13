@@ -5,6 +5,7 @@ import type {
   JournalsResponse,
   PapersResponse,
   GenerateSummaryResponse,
+  SummariesListResponse,
   RssTestResult,
   FetchResult,
   JournalFormData,
@@ -26,6 +27,11 @@ import type {
   SummaryTemplateUpdateResponse,
   PageTestResult,
   RegenerateFeedResult,
+  TrendStatsResponse,
+  TrendPapersResponse,
+  TrendSummaryResponse,
+  TrendGenerateResponse,
+  TrendHistoryResponse,
 } from './types';
 
 // ベースパス（現在のURLから自動検出）
@@ -155,6 +161,7 @@ export const api = {
       title: string;
       full_text: string;
       full_text_source: string | null;
+      pdf_url: string | null;
       full_text_fetched_at: string | null;
     }> => request(`/papers/${paperId}/full-text`),
   },
@@ -188,6 +195,8 @@ export const api = {
   summaries: {
     generate: (paperId: number): Promise<GenerateSummaryResponse> =>
       request('/summaries/generate', { method: 'POST', body: JSON.stringify({ paperId }) }),
+    getByPaper: (paperId: number): Promise<SummariesListResponse> =>
+      request(`/summaries/${paperId}`),
     // チャット（要約についての会話）
     chat: {
       getMessages: (summaryId: number): Promise<ChatMessagesResponse> =>
@@ -268,6 +277,27 @@ export const api = {
       request('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
     status: (): Promise<{ success: boolean; configured: boolean; subscribed: boolean; subscription_count: number }> =>
       request('/push/status'),
+  },
+
+  // トレンド
+  trends: {
+    stats: (): Promise<TrendStatsResponse> =>
+      request('/trends/stats'),
+    papers: (period: string): Promise<TrendPapersResponse> =>
+      request(`/trends/${period}/papers`),
+    summary: (period: string, tagIds?: number[]): Promise<TrendSummaryResponse> => {
+      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+      return request(`/trends/${period}/summary${query}`);
+    },
+    generate: (period: string, provider?: string, tagIds?: number[]): Promise<TrendGenerateResponse> =>
+      request(`/trends/${period}/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ provider, tagIds }),
+      }),
+    history: (limit?: number): Promise<TrendHistoryResponse> => {
+      const query = limit ? `?limit=${limit}` : '';
+      return request(`/trends/history${query}`);
+    },
   },
 };
 

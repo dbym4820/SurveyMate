@@ -26,7 +26,7 @@ class FullTextFetcherService
      * 論文の本文を取得
      *
      * @param Paper $paper
-     * @return array ['success' => bool, 'source' => string|null, 'text' => string|null, 'error' => string|null]
+     * @return array ['success' => bool, 'source' => string|null, 'text' => string|null, 'pdf_url' => string|null, 'error' => string|null]
      */
     public function fetchFullText(Paper $paper): array
     {
@@ -39,6 +39,7 @@ class FullTextFetcherService
                         'success' => true,
                         'source' => 'html_scrape',
                         'text' => $this->truncateText($result['text']),
+                        'pdf_url' => null,
                         'error' => null,
                     ];
                 }
@@ -47,6 +48,7 @@ class FullTextFetcherService
                 'success' => false,
                 'source' => null,
                 'text' => null,
+                'pdf_url' => null,
                 'error' => 'No DOI or accessible URL available',
             ];
         }
@@ -62,6 +64,7 @@ class FullTextFetcherService
                     'success' => true,
                     'source' => 'unpaywall_pdf',
                     'text' => $this->truncateText($result['text']),
+                    'pdf_url' => $pdfUrl,
                     'error' => null,
                 ];
             }
@@ -76,6 +79,7 @@ class FullTextFetcherService
                     'success' => true,
                     'source' => 'html_scrape',
                     'text' => $this->truncateText($result['text']),
+                    'pdf_url' => null,
                     'error' => null,
                 ];
             }
@@ -86,6 +90,7 @@ class FullTextFetcherService
             'success' => false,
             'source' => null,
             'text' => null,
+            'pdf_url' => null,
             'error' => 'All extraction methods failed',
         ];
     }

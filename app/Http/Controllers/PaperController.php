@@ -115,6 +115,7 @@ class PaperController extends Controller
             'title' => $paper->title,
             'full_text' => $paper->full_text,
             'full_text_source' => $paper->full_text_source,
+            'pdf_url' => $paper->pdf_url,
             'full_text_fetched_at' => $paper->full_text_fetched_at?->toISOString(),
         ]);
     }
@@ -145,6 +146,7 @@ class PaperController extends Controller
             'has_summary' => $paper->summaries->count() > 0 ? 1 : 0,
             'has_full_text' => $paper->hasFullText(),
             'full_text_source' => $paper->full_text_source,
+            'pdf_url' => $paper->pdf_url,
             // Always include summaries for frontend to show existing summaries
             'summaries' => $paper->summaries->map(function ($s) {
                 return [

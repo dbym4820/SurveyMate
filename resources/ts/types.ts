@@ -58,6 +58,7 @@ export interface Paper {
   has_summary?: number;
   has_full_text?: boolean;
   full_text_source?: string | null;
+  pdf_url?: string | null;
   summaries?: Summary[];
   tags?: Tag[];
 }
@@ -175,6 +176,11 @@ export interface ProvidersResponse {
 export interface GenerateSummaryResponse {
   success: boolean;
   summary: Summary;
+}
+
+export interface SummariesListResponse {
+  success: boolean;
+  summaries: Summary[];
 }
 
 // Form data types
@@ -360,4 +366,100 @@ export interface SummaryTemplateUpdateResponse {
   success: boolean;
   message: string;
   summary_template: string;
+}
+
+// Trend Summary types（トレンド要約）
+export interface TrendSummary {
+  id: number;
+  overview: string | null;
+  keyTopics: Array<{
+    topic: string;
+    description: string;
+    paperCount: number;
+  }>;
+  emergingTrends: string[];
+  journalInsights: Record<string, string>;
+  recommendations: string[];
+  period: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+  paperCount: number;
+  tagIds: number[];
+  provider: string;
+  model: string | null;
+  createdAt: string | null;
+}
+
+export interface TrendStatsResponse {
+  success: boolean;
+  stats: Record<string, {
+    count: number;
+    dateRange: {
+      from: string;
+      to: string;
+    };
+  }>;
+}
+
+export interface TrendPapersResponse {
+  success: boolean;
+  period: string;
+  dateRange: {
+    from: string;
+    to: string;
+  };
+  papers: Array<{
+    id: number;
+    title: string;
+    authors: string | string[];
+    abstract: string | null;
+    published_date: string | null;
+    journal_name: string | null;
+    journal_color: string;
+  }>;
+  count: number;
+}
+
+export interface TrendSummaryResponse {
+  success: boolean;
+  period: string;
+  dateRange: {
+    from: string;
+    to: string;
+  };
+  saved: boolean;
+  provider?: string;
+  model?: string;
+  paperCount?: number;
+  tagIds?: number[];
+  summary: TrendSummary | null;
+}
+
+export interface TrendGenerateResponse {
+  success: boolean;
+  period: string;
+  dateRange: {
+    from: string;
+    to: string;
+  };
+  paperCount: number;
+  provider: string;
+  tagIds: number[];
+  summary: {
+    overview?: string;
+    keyTopics?: Array<{
+      topic: string;
+      description: string;
+      paperCount: number;
+    }>;
+    emergingTrends?: string[];
+    journalInsights?: Record<string, string>;
+    recommendations?: string[];
+  } | null;
+  message?: string;
+}
+
+export interface TrendHistoryResponse {
+  success: boolean;
+  summaries: TrendSummary[];
 }

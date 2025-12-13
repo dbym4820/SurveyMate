@@ -377,10 +377,7 @@ export default function PaperList(): JSX.Element {
               <PaperCard
                 key={paper.id}
                 paper={paper}
-                onTagsChange={() => {
-                  fetchTags();
-                  fetchPapers();
-                }}
+                onTagsChange={fetchTags}
                 hasAnyApiKey={hasAnyApiKey}
               />
             ))}

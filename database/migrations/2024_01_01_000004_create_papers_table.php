@@ -18,6 +18,7 @@ return new class extends Migration
             $table->text('abstract')->nullable()->comment('アブストラクト');
             $table->longText('full_text')->nullable()->comment('論文本文');
             $table->string('full_text_source', 50)->nullable()->comment('本文取得元');
+            $table->string('pdf_url', 1000)->nullable()->comment('PDF URL（Unpaywallから取得）');
             $table->dateTime('full_text_fetched_at')->nullable()->comment('本文取得日時');
             $table->string('url', 1000)->nullable()->comment('論文URL');
             $table->string('doi', 255)->nullable()->comment('DOI');

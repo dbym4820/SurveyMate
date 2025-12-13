@@ -17,6 +17,7 @@ class Paper extends Model
         'abstract',
         'full_text',
         'full_text_source',
+        'pdf_url',
         'full_text_fetched_at',
         'url',
         'doi',

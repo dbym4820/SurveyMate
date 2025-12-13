@@ -126,6 +126,7 @@ Route::middleware(SessionAuth::class)->group(function () {
     // Trends
     Route::prefix('trends')->group(function () {
         Route::get('/stats', [TrendController::class, 'stats']);
+        Route::get('/history', [TrendController::class, 'history']);
         Route::get('/{period}/papers', [TrendController::class, 'papers']);
         Route::get('/{period}/summary', [TrendController::class, 'summary']);
         Route::post('/{period}/generate', [TrendController::class, 'generate']);

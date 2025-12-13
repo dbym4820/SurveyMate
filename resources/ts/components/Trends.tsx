@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp, Calendar, FileText, Sparkles, Loader2,
-  ChevronDown, ChevronUp, Clock, Target, Lightbulb
+  ChevronDown, ChevronUp, Clock, Target, Lightbulb,
+  Tag, History, Check, X
 } from 'lucide-react';
 import api, { getBasePath } from '../api';
-import type { ApiSettings } from '../types';
+import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType } from '../types';
 
 interface TrendStats {
   [period: string]: {
@@ -17,7 +18,7 @@ interface TrendStats {
 }
 
 interface TrendSummary {
-  overview: string;
+  overview: string | null;
   keyTopics: Array<{
     topic: string;
     description: string;
@@ -47,6 +48,13 @@ const PERIODS: { id: Period; label: string; description: string }[] = [
   { id: 'halfyear', label: '半年', description: '過去6ヶ月' },
 ];
 
+const PERIOD_LABELS: Record<string, string> = {
+  day: '今日',
+  week: '今週',
+  month: '今月',
+  halfyear: '半年',
+};
+
 export default function Trends(): JSX.Element {
   const [stats, setStats] = useState<TrendStats | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('week');
@@ -62,9 +70,22 @@ export default function Trends(): JSX.Element {
   const [settings, setSettings] = useState<ApiSettings | null>(null);
   const hasAnyApiKey = settings?.claude_api_key_set || settings?.openai_api_key_set;
 
+  // タグ関連
+  const [tags, setTags] = useState<TagType[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [showTagSelector, setShowTagSelector] = useState(false);
+  const tagSelectorRef = useRef<HTMLDivElement>(null);
+
+  // 履歴関連
+  const [trendHistory, setTrendHistory] = useState<TrendSummaryType[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     fetchStats();
     fetchSettings();
+    fetchTags();
   }, []);
 
   const fetchSettings = async () => {
@@ -76,12 +97,47 @@ export default function Trends(): JSX.Element {
     }
   };
 
+  const fetchTags = async () => {
+    try {
+      const data = await api.tags.list();
+      setTags(data.tags || []);
+    } catch (err) {
+      console.error('Failed to fetch tags:', err);
+    }
+  };
+
+  const fetchHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const data = await api.trends.history(20);
+      setTrendHistory(data.summaries || []);
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // タグセレクタと履歴モーダルの外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tagSelectorRef.current && !tagSelectorRef.current.contains(event.target as Node)) {
+        setShowTagSelector(false);
+      }
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (selectedPeriod) {
       fetchPapers(selectedPeriod);
       fetchSummary(selectedPeriod);
     }
-  }, [selectedPeriod]);
+  }, [selectedPeriod, selectedTagIds]);
 
   const fetchStats = async () => {
     try {
@@ -119,12 +175,15 @@ export default function Trends(): JSX.Element {
 
   const fetchSummary = async (period: Period) => {
     try {
-      const response = await fetch(`${getBasePath()}/api/trends/${period}/summary`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
+      const data = await api.trends.summary(period, selectedTagIds.length > 0 ? selectedTagIds : undefined);
       if (data.success && data.summary) {
-        setSummary(data.summary);
+        setSummary({
+          overview: data.summary.overview || null,
+          keyTopics: data.summary.keyTopics || [],
+          emergingTrends: data.summary.emergingTrends || [],
+          journalInsights: data.summary.journalInsights || {},
+          recommendations: data.summary.recommendations || [],
+        });
       } else {
         setSummary(null);
       }
@@ -143,18 +202,21 @@ export default function Trends(): JSX.Element {
     try {
       setIsGenerating(true);
       setError(null);
-      const response = await fetch(`${getBasePath()}/api/trends/${selectedPeriod}/generate`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      const data = await response.json();
+      const data = await api.trends.generate(
+        selectedPeriod,
+        undefined,
+        selectedTagIds.length > 0 ? selectedTagIds : undefined
+      );
       if (data.success && data.summary) {
-        setSummary(data.summary);
-      } else if (data.error) {
-        setError(data.error);
+        setSummary({
+          overview: data.summary.overview || null,
+          keyTopics: data.summary.keyTopics || [],
+          emergingTrends: data.summary.emergingTrends || [],
+          journalInsights: data.summary.journalInsights || {},
+          recommendations: data.summary.recommendations || [],
+        });
+      } else if (data.message) {
+        setError(data.message);
       }
     } catch (err) {
       console.error('Failed to generate summary:', err);
@@ -162,6 +224,36 @@ export default function Trends(): JSX.Element {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const toggleTag = (tagId: number) => {
+    setSelectedTagIds(prev =>
+      prev.includes(tagId)
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
+    );
+    setSummary(null); // タグ変更時に要約をリセット
+  };
+
+  const clearTags = () => {
+    setSelectedTagIds([]);
+    setSummary(null);
+  };
+
+  const openHistory = async () => {
+    setShowHistory(true);
+    await fetchHistory();
+  };
+
+  const loadHistorySummary = (historySummary: TrendSummaryType) => {
+    setSummary({
+      overview: historySummary.overview || null,
+      keyTopics: historySummary.keyTopics || [],
+      emergingTrends: historySummary.emergingTrends || [],
+      journalInsights: historySummary.journalInsights || {},
+      recommendations: historySummary.recommendations || [],
+    });
+    setShowHistory(false);
   };
 
   const currentStats = stats?.[selectedPeriod];
@@ -211,11 +303,58 @@ export default function Trends(): JSX.Element {
 
         {/* Date Range Display */}
         {currentStats && (
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
             <Clock className="w-4 h-4" />
             <span>
               {currentStats.dateRange.from} 〜 {currentStats.dateRange.to}
             </span>
+          </div>
+        )}
+
+        {/* Tag Filter */}
+        {tags.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Tag className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">タグでフィルタ</span>
+              {selectedTagIds.length > 0 && (
+                <button
+                  onClick={clearTags}
+                  className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  クリア
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {tags.map(tag => {
+                const isSelected = selectedTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleTag(tag.id)}
+                    className={`px-3 py-1.5 text-sm rounded-full border transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-gray-100 border-gray-400 text-gray-800'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {tag.name}
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedTagIds.length > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                選択したタグが付いた論文のみを対象にトレンド要約を生成します
+              </p>
+            )}
           </div>
         )}
 
@@ -234,9 +373,20 @@ export default function Trends(): JSX.Element {
                   </p>
                 </div>
               </div>
-              {/* 生成ボタン（APIキー設定時のみ） */}
-              {hasAnyApiKey && (
-                <div className="flex items-center gap-3">
+              {/* ボタン類 */}
+              <div className="flex items-center gap-3">
+                {/* 履歴ボタン */}
+                <button
+                  onClick={openHistory}
+                  className="flex items-center gap-2 px-3 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  title="履歴を表示"
+                >
+                  <History className="w-4 h-4" />
+                  <span className="hidden sm:inline">履歴</span>
+                </button>
+
+                {/* 生成ボタン（APIキー設定時のみ） */}
+                {hasAnyApiKey && (
                   <button
                     onClick={generateSummary}
                     disabled={isGenerating || papers.length === 0}
@@ -254,8 +404,8 @@ export default function Trends(): JSX.Element {
                       </>
                     )}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -434,6 +584,93 @@ export default function Trends(): JSX.Element {
             </div>
           )}
         </div>
+
+        {/* History Modal */}
+        {showHistory && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div
+              ref={historyRef}
+              className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+            >
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="w-5 h-5 text-gray-600" />
+                  <h3 className="font-semibold text-gray-900">トレンド要約の履歴</h3>
+                </div>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {isLoadingHistory ? (
+                  <div className="p-8 text-center">
+                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin mx-auto" />
+                    <p className="text-gray-500 mt-2">読み込み中...</p>
+                  </div>
+                ) : trendHistory.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    履歴がありません
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {trendHistory.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => loadHistorySummary(item)}
+                        className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                              {PERIOD_LABELS[item.period] || item.period}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {item.paperCount}件の論文
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString('ja-JP') : ''}
+                          </span>
+                        </div>
+                        {item.tagIds && item.tagIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {item.tagIds.map(tagId => {
+                              const tag = tags.find(t => t.id === tagId);
+                              if (!tag) return null;
+                              return (
+                                <span
+                                  key={tagId}
+                                  className="px-2 py-0.5 text-xs rounded-full bg-gray-50 text-gray-600 flex items-center gap-1"
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full"
+                                    style={{ backgroundColor: tag.color }}
+                                  />
+                                  {tag.name}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-700 line-clamp-2">
+                          {item.overview || '概要なし'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                          <span>{item.provider}</span>
+                          {item.model && <span>/ {item.model}</span>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
   );
 }

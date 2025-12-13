@@ -68,6 +68,7 @@ class FetchFullText extends Command
                 $paper->update([
                     'full_text' => $result['text'],
                     'full_text_source' => $result['source'],
+                    'pdf_url' => $result['pdf_url'],
                     'full_text_fetched_at' => now(),
                 ]);
                 $success++;

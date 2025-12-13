@@ -74,11 +74,24 @@ class TrendController extends Controller
             return response()->json(['error' => '無効な期間です'], 400);
         }
 
-        $papers = Paper::with('journal:id,name')
+        // Get tag IDs from request (optional)
+        $tagIds = $request->input('tagIds', []);
+        if (!is_array($tagIds)) {
+            $tagIds = [];
+        }
+
+        $papersQuery = Paper::with(['journal:id,name', 'tags:id,name'])
             ->forUser($user->id)
-            ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']])
-            ->orderBy('published_date', 'desc')
-            ->get();
+            ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']]);
+
+        // Filter by tags if specified
+        if (!empty($tagIds)) {
+            $papersQuery->whereHas('tags', function ($query) use ($tagIds) {
+                $query->whereIn('tags.id', $tagIds);
+            });
+        }
+
+        $papers = $papersQuery->orderBy('published_date', 'desc')->get();
 
         if ($papers->isEmpty()) {
             return response()->json([
@@ -98,7 +111,7 @@ class TrendController extends Controller
         $provider = $request->input('provider', config('services.ai.provider', 'claude'));
 
         try {
-            $summary = $this->generateTrendSummary($papers, $period, $dateRange, $provider);
+            $summary = $this->generateTrendSummary($user->id, $papers, $period, $dateRange, $provider, $tagIds);
 
             return response()->json([
                 'success' => true,
@@ -109,6 +122,7 @@ class TrendController extends Controller
                 ],
                 'paperCount' => $papers->count(),
                 'provider' => $provider,
+                'tagIds' => $tagIds,
                 'summary' => $summary,
             ]);
         } catch (\Exception $e) {
@@ -123,6 +137,8 @@ class TrendController extends Controller
      */
     public function summary(Request $request, string $period): JsonResponse
     {
+        $user = $request->attributes->get('user');
+
         $dateRange = $this->getDateRange($period);
 
         if (!$dateRange) {
@@ -132,8 +148,14 @@ class TrendController extends Controller
         $dateFrom = $dateRange['from']->format('Y-m-d');
         $dateTo = $dateRange['to']->format('Y-m-d');
 
-        // Try to get from database
-        $savedSummary = TrendSummary::findByPeriodAndDate($period, $dateFrom, $dateTo);
+        // Get tag IDs from query string (optional)
+        $tagIds = $request->query('tagIds', []);
+        if (is_string($tagIds)) {
+            $tagIds = $tagIds ? array_map('intval', explode(',', $tagIds)) : [];
+        }
+
+        // Try to get latest summary for user with matching tags
+        $savedSummary = TrendSummary::findLatestForUser($user->id, $period, $tagIds ?: null);
 
         if ($savedSummary) {
             return response()->json([
@@ -147,6 +169,7 @@ class TrendController extends Controller
                 'provider' => $savedSummary->ai_provider,
                 'model' => $savedSummary->ai_model,
                 'paperCount' => $savedSummary->paper_count,
+                'tagIds' => $savedSummary->tag_ids ?? [],
                 'summary' => $savedSummary->toApiResponse(),
             ]);
         }
@@ -160,6 +183,22 @@ class TrendController extends Controller
             ],
             'saved' => false,
             'summary' => null,
+        ]);
+    }
+
+    /**
+     * Get trend summary history for a user
+     */
+    public function history(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+        $limit = (int) $request->query('limit', 20);
+
+        $summaries = TrendSummary::getHistoryForUser($user->id, $limit);
+
+        return response()->json([
+            'success' => true,
+            'summaries' => $summaries->map(fn($s) => $s->toApiResponse()),
         ]);
     }
 
@@ -225,7 +264,7 @@ class TrendController extends Controller
     /**
      * Generate trend summary using AI
      */
-    private function generateTrendSummary($papers, string $period, array $dateRange, string $provider = 'claude'): array
+    private function generateTrendSummary(int $userId, $papers, string $period, array $dateRange, string $provider = 'claude', array $tagIds = []): array
     {
         $periodLabels = [
             'day' => '今日',
@@ -254,11 +293,12 @@ class TrendController extends Controller
 
         $result = $this->aiService->generateCustomSummary($prompt, $provider);
 
-        // Save to database
+        // Save to database (always create new record for history)
         $dateFrom = $dateRange['from']->format('Y-m-d');
         $dateTo = $dateRange['to']->format('Y-m-d');
 
-        TrendSummary::createOrUpdateSummary([
+        TrendSummary::createSummary([
+            'user_id' => $userId,
             'period' => $period,
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
@@ -270,6 +310,7 @@ class TrendController extends Controller
             'journal_insights' => $result['journalInsights'] ?? null,
             'recommendations' => $result['recommendations'] ?? null,
             'paper_count' => $papers->count(),
+            'tag_ids' => !empty($tagIds) ? $tagIds : null,
         ]);
 
         return $result;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText } from 'lucide-react';
+import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText, History, RefreshCw } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
 import type { Paper, Summary, Tag as TagType, ChatMessage } from '../types';
@@ -42,11 +42,18 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // 要約履歴関連state
+  const [allSummaries, setAllSummaries] = useState<Summary[]>(paper.summaries || []);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const historyDropdownRef = useRef<HTMLDivElement>(null);
+
   // 本文表示関連state
   const [fullTextOpen, setFullTextOpen] = useState(false);
   const [fullText, setFullText] = useState<string | null>(null);
   const [fullTextLoading, setFullTextLoading] = useState(false);
   const [fullTextSource, setFullTextSource] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(paper.pdf_url || null);
 
   // 外側クリックでドロップダウンを閉じる
   useEffect(() => {
@@ -55,12 +62,15 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
         setShowTagInput(false);
         setTagInput('');
       }
+      if (historyDropdownRef.current && !historyDropdownRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
     };
-    if (showTagInput) {
+    if (showTagInput || showHistory) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTagInput]);
+  }, [showTagInput, showHistory]);
 
   // 既存の要約がある場合は初期化時にセット
   useEffect(() => {
@@ -84,7 +94,11 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
       const data = await api.summaries.generate(paper.id);
       if (data.success) {
         setSummary(data.summary);
+        // 履歴の先頭に追加
+        setAllSummaries((prev) => [data.summary, ...prev]);
         setExpanded(true);
+        // チャット履歴をクリア（新しい要約なので）
+        setChatMessages([]);
         showToast('AI要約を生成しました', 'success');
       } else {
         throw new Error('Summary generation failed');
@@ -94,6 +108,45 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
     } finally {
       setLoading(false);
     }
+  };
+
+  // 要約履歴を取得
+  const fetchSummaryHistory = useCallback(async (): Promise<void> => {
+    setHistoryLoading(true);
+    try {
+      const data = await api.summaries.getByPaper(paper.id);
+      if (data.success) {
+        setAllSummaries(data.summaries);
+      }
+    } catch (error) {
+      console.error('Failed to fetch summary history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [paper.id]);
+
+  // 履歴から要約を選択
+  const selectSummaryFromHistory = (selectedSummary: Summary): void => {
+    setSummary(selectedSummary);
+    setShowHistory(false);
+    setExpanded(true);
+    // チャット履歴をクリア（別の要約に切り替えたので）
+    setChatMessages([]);
+  };
+
+  // 履歴ドロップダウンを開く（必要に応じて履歴を取得）
+  const toggleHistory = async (): Promise<void> => {
+    if (!showHistory && allSummaries.length <= 1) {
+      // 履歴が1件以下の場合はAPIから取得
+      await fetchSummaryHistory();
+    }
+    setShowHistory(!showHistory);
+  };
+
+  // 日時フォーマット（履歴表示用）
+  const formatDateTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
 
   const authors = Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors;
@@ -314,6 +367,13 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
 
   // 本文を取得して表示
   const openFullText = async (): Promise<void> => {
+    // PDFがある場合は直接表示
+    if (pdfUrl) {
+      setFullTextOpen(true);
+      document.body.style.overflow = 'hidden';
+      return;
+    }
+
     if (fullText) {
       setFullTextOpen(true);
       document.body.style.overflow = 'hidden';
@@ -326,6 +386,9 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
       if (data.success) {
         setFullText(data.full_text);
         setFullTextSource(data.full_text_source);
+        if (data.pdf_url) {
+          setPdfUrl(data.pdf_url);
+        }
         setFullTextOpen(true);
         document.body.style.overflow = 'hidden';
       }
@@ -565,18 +628,38 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                   </button>
                 )
               ) : (
-                <button
-                  onClick={() => setExpanded(!expanded)}
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs sm:text-sm rounded-lg hover:from-green-600 hover:to-emerald-600 font-medium transition-all"
-                >
-                  {expanded ? (
-                    <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <>
+                  {/* 要約表示トグル */}
+                  <button
+                    onClick={() => setExpanded(!expanded)}
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs sm:text-sm rounded-lg hover:from-green-600 hover:to-emerald-600 font-medium transition-all"
+                  >
+                    {expanded ? (
+                      <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    )}
+                    <span className="hidden xs:inline">{expanded ? 'AI要約を閉じる' : 'AI要約を表示'}</span>
+                    <span className="xs:hidden">{expanded ? '閉じる' : '要約'}</span>
+                  </button>
+
+                  {/* 再要約ボタン（APIキー設定時のみ） */}
+                  {hasAnyApiKey && (
+                    <button
+                      onClick={generateSummary}
+                      disabled={loading}
+                      className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="新しい要約を生成"
+                    >
+                      {loading ? (
+                        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      )}
+                      <span className="hidden sm:inline">{loading ? '生成中...' : '再要約'}</span>
+                    </button>
                   )}
-                  <span className="hidden xs:inline">{expanded ? 'AI要約を閉じる' : 'AI要約を表示'}</span>
-                  <span className="xs:hidden">{expanded ? '閉じる' : '要約'}</span>
-                </button>
+                </>
               )}
 
               {/* 本文表示ボタン（本文がある場合のみ） */}
@@ -624,6 +707,73 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                       <span className="text-xs text-gray-500 hidden sm:inline">
                         {summary.ai_model}
                       </span>
+                    )}
+                    {/* 履歴ボタン（2件以上の履歴がある場合のみ表示） */}
+                    {allSummaries.length >= 2 && (
+                      <div className="relative" ref={historyDropdownRef}>
+                        <button
+                          onClick={toggleHistory}
+                          disabled={historyLoading}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors ${
+                            showHistory
+                              ? 'text-gray-700 bg-white'
+                              : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                          }`}
+                          title="要約履歴を表示"
+                        >
+                          {historyLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <History className="w-3.5 h-3.5" />
+                          )}
+                          <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
+                            {allSummaries.length}
+                          </span>
+                        </button>
+
+                        {/* 履歴ドロップダウン */}
+                        {showHistory && (
+                          <div className="absolute top-full right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto">
+                            <div className="p-2 border-b border-gray-100">
+                              <span className="text-xs font-medium text-gray-700">要約履歴</span>
+                            </div>
+                            <div className="divide-y divide-gray-100">
+                              {allSummaries.map((s) => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => selectSummaryFromHistory(s)}
+                                  className={`w-full px-3 py-2.5 text-left hover:bg-gray-50 transition-colors ${
+                                    summary?.id === s.id ? 'bg-purple-50' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {summary?.id === s.id ? (
+                                      <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
+                                    ) : (
+                                      <span className="w-2 h-2 rounded-full border border-gray-300 flex-shrink-0" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-medium text-gray-700">
+                                          {s.ai_provider}
+                                        </span>
+                                        {s.ai_model && (
+                                          <span className="text-[10px] text-gray-500 truncate">
+                                            {s.ai_model}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-gray-400 mt-0.5">
+                                        {formatDateTime(s.created_at)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -907,10 +1057,10 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
       )}
 
       {/* 本文表示モーダル */}
-      {fullTextOpen && fullText && (
+      {fullTextOpen && (pdfUrl || fullText) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeFullText}>
           <div
-            className="w-full max-w-4xl h-[90vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+            className="w-full max-w-5xl h-[90vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* モーダルヘッダー */}
@@ -921,31 +1071,55 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                   <FileText className="w-3 h-3" />
                   <span>
                     論文本文
-                    {fullTextSource && (
+                    {(pdfUrl || fullTextSource) && (
                       <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">
-                        {fullTextSource === 'unpaywall_pdf' ? 'PDF' : fullTextSource === 'html_scrape' ? 'HTML' : fullTextSource}
+                        {pdfUrl ? 'PDF' : fullTextSource === 'html_scrape' ? 'HTML' : fullTextSource}
                       </span>
                     )}
                   </span>
                 </div>
               </div>
-              <button
-                onClick={closeFullText}
-                className="p-1.5 hover:bg-white/20 rounded transition-colors"
-                title="閉じる (ESC)"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {pdfUrl && (
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/20 hover:bg-white/30 rounded transition-colors"
+                    title="PDFを新しいタブで開く"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">PDFを開く</span>
+                  </a>
+                )}
+                <button
+                  onClick={closeFullText}
+                  className="p-1.5 hover:bg-white/20 rounded transition-colors"
+                  title="閉じる (ESC)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* 本文表示エリア */}
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-              <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
-                <p className="text-sm sm:text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
-                  {fullText}
-                </p>
+            {pdfUrl ? (
+              <div className="flex-1 bg-gray-800">
+                <iframe
+                  src={pdfUrl}
+                  className="w-full h-full border-0"
+                  title="論文PDF"
+                />
               </div>
-            </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
+                  <p className="text-sm sm:text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
+                    {fullText}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* フッター */}
             <div className="border-t border-gray-200 px-4 py-3 bg-white flex items-center justify-between">
