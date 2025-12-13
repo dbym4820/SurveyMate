@@ -20,13 +20,15 @@ class AiSummaryService
 
     /**
      * Set the user context for API key retrieval
+     * Always refresh from database to ensure we have the latest settings
      *
      * @param User $user
      * @return self
      */
     public function setUser(User $user): self
     {
-        $this->user = $user;
+        // データベースから最新のユーザー情報を取得して，調査観点や要約テンプレートを確実に反映
+        $this->user = User::find($user->id);
         return $this;
     }
 
