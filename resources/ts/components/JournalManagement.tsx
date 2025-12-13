@@ -17,7 +17,6 @@ export default function JournalManagement(): JSX.Element {
   const [editingJournal, setEditingJournal] = useState<Journal | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [fetchingJournal, setFetchingJournal] = useState<string | null>(null);
-  const [fetchingAll, setFetchingAll] = useState(false);
   const [regeneratingJournal, setRegeneratingJournal] = useState<string | null>(null);
   const [copiedFeedUrl, setCopiedFeedUrl] = useState<string | null>(null);
 
@@ -137,26 +136,6 @@ export default function JournalManagement(): JSX.Element {
     }
   };
 
-  const handleFetchAll = async (): Promise<void> => {
-    setFetchingAll(true);
-    try {
-      const data = await api.journals.fetchAll();
-      if (data.success) {
-        const { total_new, error_count } = data.summary;
-        if (error_count > 0) {
-          showToast(`${total_new}件の新規論文を取得（${error_count}件のエラー）`, 'info');
-        } else {
-          showToast(`${total_new}件の新規論文を取得しました`, 'success');
-        }
-        fetchJournals();
-      }
-    } catch (error) {
-      showToast('取得に失敗しました: ' + (error as Error).message, 'error');
-    } finally {
-      setFetchingAll(false);
-    }
-  };
-
   return (
     <main className="w-[85%] mx-auto py-6">
       {/* アクションバー */}
@@ -166,18 +145,6 @@ export default function JournalManagement(): JSX.Element {
           {journals.length}件の論文誌
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleFetchAll}
-            disabled={fetchingAll || journals.filter(j => j.is_active !== 0 && j.is_active !== false).length === 0}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {fetchingAll ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            {fetchingAll ? '取得中...' : 'すべてフェッチ'}
-          </button>
           <button
             onClick={() => {
               setEditingJournal(null);
