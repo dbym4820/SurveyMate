@@ -97,6 +97,8 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
     setIsRefreshing(true);
     try {
       await api.admin.runScheduler();
+      // フィード取得完了を通知（PaperListなどで再描画）
+      window.dispatchEvent(new CustomEvent('feeds-updated'));
     } catch (error) {
       console.error('Manual fetch failed:', error);
     } finally {

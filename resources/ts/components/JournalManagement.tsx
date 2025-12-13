@@ -62,6 +62,17 @@ export default function JournalManagement(): JSX.Element {
     fetchJournals();
   }, [showInactive]);
 
+  // フィード更新イベントをリッスンしてデータを再取得
+  useEffect(() => {
+    const handleFeedsUpdated = () => {
+      fetchJournals();
+    };
+    window.addEventListener('feeds-updated', handleFeedsUpdated);
+    return () => {
+      window.removeEventListener('feeds-updated', handleFeedsUpdated);
+    };
+  }, [showInactive]);
+
   const fetchJournals = async (): Promise<void> => {
     setLoading(true);
     try {

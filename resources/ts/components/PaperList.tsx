@@ -168,6 +168,18 @@ export default function PaperList(): JSX.Element {
     fetchPapers();
   }, [fetchPapers]);
 
+  // フィード更新イベントをリッスンしてデータを再取得
+  useEffect(() => {
+    const handleFeedsUpdated = () => {
+      fetchJournals();
+      fetchPapers();
+    };
+    window.addEventListener('feeds-updated', handleFeedsUpdated);
+    return () => {
+      window.removeEventListener('feeds-updated', handleFeedsUpdated);
+    };
+  }, [fetchJournals, fetchPapers]);
+
   // Toggle journal selection
   const toggleJournal = (journalId: string): void => {
     setSelectedJournals((prev) =>
