@@ -149,11 +149,16 @@ class AdminController extends Controller
 
         // 初回フェッチを実行
         if ($journal->isAiGenerated()) {
-            // AI生成の場合
-            $fetchResult = $this->aiRssGenerator->generateFeed($journal, $user);
+            // AI生成の場合：ページ構造を解析してセレクタを保存
+            $setupResult = $this->aiRssGenerator->setupFeed($journal, $user);
             $message = '論文誌を追加しました';
-            if ($fetchResult['success']) {
-                $message .= '（' . ($fetchResult['papers_count'] ?? 0) . '件の論文を検出）';
+            if ($setupResult['success']) {
+                // HTMLからパースした論文情報をデータベースに登録
+                $fetchResult = $this->rssFetcher->fetchJournal($journal);
+                $newPapers = $fetchResult['new_papers'] ?? 0;
+                $message .= '（' . $newPapers . '件の論文を登録）';
+            } else {
+                $fetchResult = $setupResult;
             }
         } else {
             // 通常RSSの場合

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Services\AiSummaryService;
+use App\Services\AiRssGeneratorService;
 use App\Services\RssFetcherService;
 use App\Services\FullTextFetcherService;
 
@@ -24,8 +25,15 @@ class AppServiceProvider extends ServiceProvider
             return new FullTextFetcherService();
         });
 
+        $this->app->singleton(AiRssGeneratorService::class, function ($app) {
+            return new AiRssGeneratorService();
+        });
+
         $this->app->singleton(RssFetcherService::class, function ($app) {
-            return new RssFetcherService($app->make(FullTextFetcherService::class));
+            return new RssFetcherService(
+                $app->make(FullTextFetcherService::class),
+                $app->make(AiRssGeneratorService::class)
+            );
         });
     }
 

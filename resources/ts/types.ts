@@ -14,7 +14,6 @@ export interface User {
 
 export interface GeneratedFeed {
   id: number;
-  feed_token: string;
   source_url: string;
   ai_provider: string | null;
   ai_model: string | null;
@@ -60,6 +59,7 @@ export interface Paper {
   full_text_source?: string | null;
   pdf_url?: string | null;
   has_local_pdf?: boolean;
+  pdf_status?: 'pending' | 'processing' | 'completed' | 'failed' | null;
   summaries?: Summary[];
   tags?: Tag[];
 }
@@ -240,7 +240,7 @@ export interface RegenerateFeedResult {
   success: boolean;
   message?: string;
   papers_count?: number;
-  feed_token?: string;
+  new_papers?: number;
   provider?: string;
   error?: string;
 }

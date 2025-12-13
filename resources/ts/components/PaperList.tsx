@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Filter, Calendar, ChevronDown, ChevronUp, Loader2, FileText, Tag, X, BookOpen
@@ -21,7 +21,7 @@ export default function PaperList(): JSX.Element {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState('month');
+  const [dateFilter, setDateFilter] = useState('all');
   const [showJournalFilter, setShowJournalFilter] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<Pagination>({ total: 0, limit: 0, offset: 0, hasMore: false });
@@ -138,11 +138,11 @@ export default function PaperList(): JSX.Element {
   }, [dateFilter]);
 
   // Fetch papers
-  const fetchPapers = useCallback(async (): Promise<void> => {
+  const fetchPapers = useCallback(async (): Promise<Paper[]> => {
     if (selectedJournals.length === 0) {
       setPapers([]);
       setLoading(false);
-      return;
+      return [];
     }
 
     setLoading(true);
@@ -156,23 +156,135 @@ export default function PaperList(): JSX.Element {
       if (data.success) {
         setPapers(data.papers);
         setPagination(data.pagination);
+        return data.papers;
       }
+      return [];
     } catch (error) {
       console.error('Failed to fetch papers:', error);
+      return [];
     } finally {
       setLoading(false);
     }
   }, [selectedJournals, selectedTags, getDateFrom]);
 
+  // PDF処理中の論文があれば5秒ごとにワーカー起動確認
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const serverProcessingCountRef = useRef<number>(0);
+
+  // ポーリングを開始
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      return; // 既に開始済み
+    }
+    console.log('[PaperList] PDF処理状況ポーリングを開始');
+    pollingIntervalRef.current = setInterval(() => {
+      checkProcessingStatusInternal();
+    }, 5000);
+  }, []);
+
+  // ポーリングを停止
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      console.log('[PaperList] PDF処理状況ポーリングを停止');
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
+
+  // 処理状況確認とワーカー起動（個別の論文状態を更新）
+  const checkProcessingStatusInternal = async () => {
+    try {
+      const status = await api.papers.processingStatus();
+      console.log('[PaperList] 処理状況:', status);
+
+      // サーバー側の処理中カウントを保存
+      serverProcessingCountRef.current = status.processing_count;
+
+      // 各論文のpdf_statusを個別に更新
+      if (status.paper_statuses && status.paper_statuses.length > 0) {
+        setPapers((prevPapers) => {
+          let hasChanges = false;
+          const updatedPapers = prevPapers.map((paper) => {
+            const statusInfo = status.paper_statuses.find((s) => s.id === paper.id);
+            if (statusInfo) {
+              // 状態が変わった場合のみ更新
+              if (
+                paper.pdf_status !== statusInfo.pdf_status ||
+                paper.has_local_pdf !== statusInfo.has_local_pdf
+              ) {
+                hasChanges = true;
+                console.log(`[PaperList] 論文 ${paper.id} の状態更新: ${paper.pdf_status} → ${statusInfo.pdf_status}`);
+                return {
+                  ...paper,
+                  pdf_status: statusInfo.pdf_status as Paper['pdf_status'],
+                  has_local_pdf: statusInfo.has_local_pdf,
+                };
+              }
+            }
+            return paper;
+          });
+          // 変更がなければ同じ配列を返す（再レンダリング防止）
+          return hasChanges ? updatedPapers : prevPapers;
+        });
+      }
+
+      // サーバー側で処理中の論文がなくなり、ジョブもない場合はポーリング停止
+      if (status.processing_count === 0 && status.pending_jobs === 0 && pollingIntervalRef.current) {
+        console.log('[PaperList] サーバー側で全処理完了、ポーリング停止');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+
+      return status;
+    } catch (error) {
+      console.error('[PaperList] 処理状況確認エラー:', error);
+      return null;
+    }
+  };
+
+  // 画面表示時（論文取得後）にキューにジョブがあればワーカー起動・ポーリング開始
   useEffect(() => {
-    fetchPapers();
-  }, [fetchPapers]);
+    const loadAndCheckProcessing = async () => {
+      const loadedPapers = await fetchPapers();
+
+      // 画面表示時に必ず処理状況をチェック（キューにジョブがあればワーカー起動）
+      const status = await checkProcessingStatusInternal();
+
+      // ローカルの論文にPDF処理中のものがあるか、サーバー側でジョブがある場合はポーリング開始
+      const hasLocalProcessing = loadedPapers.some(
+        (p) => p.pdf_status === 'pending' || p.pdf_status === 'processing'
+      );
+      const hasServerProcessing = status && (status.processing_count > 0 || status.pending_jobs > 0);
+
+      if (hasLocalProcessing || hasServerProcessing) {
+        console.log('[PaperList] 画面表示: 処理中のジョブを検出、ポーリング開始', {
+          localProcessing: hasLocalProcessing,
+          serverProcessing: hasServerProcessing,
+          pendingJobs: status?.pending_jobs,
+        });
+        startPolling();
+      }
+    };
+    loadAndCheckProcessing();
+  }, [selectedJournals, selectedTags, getDateFrom]);
+
+  // コンポーネントのアンマウント時にポーリングを停止
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
 
   // フィード更新イベントをリッスンしてデータを再取得
   useEffect(() => {
-    const handleFeedsUpdated = () => {
+    const handleFeedsUpdated = async () => {
       fetchJournals();
-      fetchPapers();
+      await fetchPapers();
+      // フィード更新後は処理状況をチェックしてポーリング開始
+      const status = await checkProcessingStatusInternal();
+      if (status && (status.processing_count > 0 || status.pending_jobs > 0)) {
+        startPolling();
+      }
     };
     window.addEventListener('feeds-updated', handleFeedsUpdated);
     return () => {

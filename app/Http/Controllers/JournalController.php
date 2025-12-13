@@ -39,7 +39,6 @@ class JournalController extends Controller
                 if ($j->generatedFeed) {
                     $data['generated_feed'] = [
                         'id' => $j->generatedFeed->id,
-                        'feed_token' => $j->generatedFeed->feed_token,
                         'source_url' => $j->generatedFeed->source_url,
                         'ai_provider' => $j->generatedFeed->ai_provider,
                         'ai_model' => $j->generatedFeed->ai_model,
@@ -94,7 +93,6 @@ class JournalController extends Controller
         if ($journal->generatedFeed) {
             $response['generated_feed'] = [
                 'id' => $journal->generatedFeed->id,
-                'feed_token' => $journal->generatedFeed->feed_token,
                 'source_url' => $journal->generatedFeed->source_url,
                 'ai_provider' => $journal->generatedFeed->ai_provider,
                 'ai_model' => $journal->generatedFeed->ai_model,

@@ -166,6 +166,17 @@ export const api = {
       full_text_fetched_at: string | null;
     }> => request(`/papers/${paperId}/full-text`),
     getPdfUrl: (paperId: number): string => `${getApiBase()}/papers/${paperId}/pdf`,
+    processingStatus: (): Promise<{
+      success: boolean;
+      processing_count: number;
+      pending_jobs: number;
+      worker_started: boolean;
+      paper_statuses: Array<{
+        id: number;
+        pdf_status: string;
+        has_local_pdf: boolean;
+      }>;
+    }> => request('/papers/processing-status'),
   },
 
   // タグ

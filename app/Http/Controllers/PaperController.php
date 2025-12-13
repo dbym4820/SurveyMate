@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Models\Paper;
+use App\Services\QueueRunnerService;
 use Illuminate\Support\Facades\DB;
 
 class PaperController extends Controller
@@ -42,7 +43,8 @@ class PaperController extends Controller
         $offset = (int) ($request->offset ?? 0);
 
         $total = $query->count();
-        $papers = $query->orderBy('published_date', 'desc')
+        // Use COALESCE to handle NULL published_date (AI-generated papers may not have dates)
+        $papers = $query->orderByRaw('COALESCE(published_date, DATE(fetched_at)) DESC')
             ->orderBy('fetched_at', 'desc')
             ->offset($offset)
             ->limit($limit)
@@ -154,6 +156,51 @@ class PaperController extends Controller
         ]);
     }
 
+    /**
+     * PDF処理状況を確認し、必要に応じてワーカーを再起動
+     * 各論文のpdf_statusも返す
+     */
+    public function processingStatus(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        // ユーザーの論文でPDF処理に関係するもの（pending/processing/completed/failed）のIDとステータスを取得
+        $paperStatuses = Paper::forUser($user->id)
+            ->whereNotNull('pdf_status')
+            ->select('id', 'pdf_status', 'pdf_path')
+            ->get()
+            ->map(function ($paper) {
+                return [
+                    'id' => $paper->id,
+                    'pdf_status' => $paper->pdf_status,
+                    'has_local_pdf' => !empty($paper->pdf_path),
+                ];
+            });
+
+        $processingCount = $paperStatuses->whereIn('pdf_status', ['pending', 'processing'])->count();
+
+        // キュー内のジョブ数
+        $pendingJobs = QueueRunnerService::getPendingJobCount('pdf-processing');
+
+        // ワーカーの状態
+        $workerRunning = QueueRunnerService::isWorkerRunning('pdf-processing');
+        $workerStarted = false;
+
+        // ジョブがある場合は常にワーカー起動を試みる
+        if ($pendingJobs > 0) {
+            $workerStarted = QueueRunnerService::startWorkerIfNeeded('pdf-processing');
+        }
+
+        return response()->json([
+            'success' => true,
+            'processing_count' => $processingCount,
+            'pending_jobs' => $pendingJobs,
+            'worker_running' => $workerRunning || $workerStarted,
+            'worker_started' => $workerStarted,
+            'paper_statuses' => $paperStatuses,
+        ]);
+    }
+
     private function formatPaper(Paper $paper, bool $detailed = false): array
     {
         $data = [
@@ -182,6 +229,7 @@ class PaperController extends Controller
             'full_text_source' => $paper->full_text_source,
             'pdf_url' => $paper->pdf_url,
             'has_local_pdf' => $paper->hasLocalPdf(),
+            'pdf_status' => $paper->pdf_status,
             // Always include summaries for frontend to show existing summaries
             'summaries' => $paper->summaries->map(function ($s) {
                 return [

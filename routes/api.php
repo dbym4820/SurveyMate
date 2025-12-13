@@ -66,6 +66,7 @@ Route::middleware(SessionAuth::class)->group(function () {
     // Papers
     Route::get('/papers', [PaperController::class, 'index']);
     Route::get('/papers/stats', [PaperController::class, 'stats']);
+    Route::get('/papers/processing-status', [PaperController::class, 'processingStatus']);
     Route::get('/papers/{id}', [PaperController::class, 'show']);
     Route::get('/papers/{id}/full-text', [PaperController::class, 'getFullText']);
     Route::get('/papers/{id}/pdf', [PaperController::class, 'downloadPdf']);

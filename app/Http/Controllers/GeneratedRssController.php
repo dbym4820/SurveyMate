@@ -3,63 +3,24 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
-use App\Models\GeneratedFeed;
 use App\Models\Journal;
 use App\Services\AiRssGeneratorService;
+use App\Services\RssFetcherService;
 
 class GeneratedRssController extends Controller
 {
-    private AiRssGeneratorService $rssGenerator;
+    private AiRssGeneratorService $aiGenerator;
+    private RssFetcherService $rssFetcher;
 
-    public function __construct(AiRssGeneratorService $rssGenerator)
+    public function __construct(AiRssGeneratorService $aiGenerator, RssFetcherService $rssFetcher)
     {
-        $this->rssGenerator = $rssGenerator;
+        $this->aiGenerator = $aiGenerator;
+        $this->rssFetcher = $rssFetcher;
     }
 
     /**
-     * Serve RSS feed by feed token (public, no authentication required)
-     * Dynamically fetches and parses the source page using saved selectors
-     */
-    public function serve(string $feedToken): Response
-    {
-        $feed = GeneratedFeed::where('feed_token', $feedToken)
-            ->with('journal')
-            ->first();
-
-        if (!$feed) {
-            return response('Feed not found', 404)
-                ->header('Content-Type', 'text/plain');
-        }
-
-        // Check if we have valid selectors
-        $selectors = $feed->extraction_config['selectors'] ?? null;
-        if (!$selectors || empty($selectors['title'])) {
-            return response('Feed not configured. Please regenerate the feed.', 503)
-                ->header('Content-Type', 'text/plain');
-        }
-
-        // Dynamically generate RSS by fetching and parsing the source page
-        try {
-            $rssXml = $this->rssGenerator->generateRssDynamically($feed);
-
-            return response($rssXml)
-                ->header('Content-Type', 'application/rss+xml; charset=utf-8')
-                ->header('Cache-Control', 'public, max-age=1800'); // Cache for 30 minutes
-        } catch (\Exception $e) {
-            \Log::error('Failed to generate RSS dynamically', [
-                'feed_token' => $feedToken,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response('Failed to fetch feed: ' . $e->getMessage(), 503)
-                ->header('Content-Type', 'text/plain');
-        }
-    }
-
-    /**
-     * Regenerate feed (requires authentication)
+     * Reanalyze page structure and fetch papers (requires authentication)
      */
     public function regenerate(Request $request, string $journalId): JsonResponse
     {
@@ -81,21 +42,30 @@ class GeneratedRssController extends Controller
             ], 400);
         }
 
-        $result = $this->rssGenerator->generateFeed($journal, $user);
+        // AIでページ構造を再解析してセレクタを更新
+        $result = $this->aiGenerator->reanalyzeStructure($journal, $user);
 
         if (!$result['success']) {
-            return response()->json([
+            $response = [
                 'success' => false,
                 'error' => $result['error'],
-            ], 400);
+            ];
+            if (!empty($result['debug'])) {
+                $response['debug'] = $result['debug'];
+            }
+            return response()->json($response, 400);
         }
+
+        // HTMLからパースした論文情報をデータベースに登録
+        $fetchResult = $this->rssFetcher->fetchJournal($journal);
+        $newPapers = $fetchResult['new_papers'] ?? 0;
 
         return response()->json([
             'success' => true,
-            'message' => 'Feed regenerated successfully',
+            'message' => 'ページを再解析しました（' . $newPapers . '件の新規論文を登録）',
             'papers_count' => $result['papers_count'],
-            'feed_token' => $result['feed_token'],
-            'provider' => $result['provider'] ?? ($result['method'] === 'selector' ? 'selector' : null),
+            'new_papers' => $newPapers,
+            'provider' => $result['provider'] ?? null,
         ]);
     }
 
@@ -134,9 +104,9 @@ class GeneratedRssController extends Controller
 
         // Use auto-redirect version if enabled
         if ($autoRedirect) {
-            $result = $this->rssGenerator->testPageAnalysisWithRedirect($url, $user);
+            $result = $this->aiGenerator->testPageAnalysisWithRedirect($url, $user);
         } else {
-            $result = $this->rssGenerator->testPageAnalysis($url, $user);
+            $result = $this->aiGenerator->testPageAnalysis($url, $user);
         }
 
         $response = [

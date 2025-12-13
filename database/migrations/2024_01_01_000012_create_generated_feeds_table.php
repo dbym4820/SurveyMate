@@ -12,14 +12,12 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('user_id')->comment('ユーザーID');
             $table->string('journal_id', 191)->comment('論文誌ID');
-            $table->char('feed_token', 36)->unique()->comment('公開RSS URL用UUID');
             $table->string('source_url', 1000)->comment('論文一覧ページURL');
-            $table->longText('rss_xml')->nullable()->comment('生成されたRSS XML');
-            $table->json('extraction_config')->nullable()->comment('AI抽出設定');
+            $table->json('extraction_config')->nullable()->comment('AI抽出設定（セレクタ等）');
             $table->string('ai_provider', 50)->nullable()->comment('使用AIプロバイダ');
             $table->string('ai_model', 100)->nullable()->comment('使用AIモデル');
-            $table->dateTime('last_generated_at')->nullable()->comment('最終生成日時');
-            $table->string('generation_status', 50)->default('pending')->comment('生成ステータス');
+            $table->dateTime('last_generated_at')->nullable()->comment('最終解析日時');
+            $table->string('generation_status', 50)->default('pending')->comment('解析ステータス');
             $table->text('error_message')->nullable()->comment('エラーメッセージ');
             $table->timestamps();
 

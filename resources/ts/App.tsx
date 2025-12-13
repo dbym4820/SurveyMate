@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import api, { getBasePath } from './api';
@@ -72,6 +72,82 @@ function MainLayout({ user, onLogout }: { user: User; onLogout: () => void }): J
   const navigate = useNavigate();
   const location = useLocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // グローバルキュー監視用
+  const queuePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ポーリングを停止
+  const stopQueuePolling = useCallback(() => {
+    if (queuePollingRef.current) {
+      console.log('[App] キュー監視: ポーリング停止');
+      clearInterval(queuePollingRef.current);
+      queuePollingRef.current = null;
+    }
+  }, []);
+
+  // ポーリングを開始
+  const startQueuePolling = useCallback(() => {
+    if (queuePollingRef.current) {
+      return; // 既に開始済み
+    }
+    console.log('[App] キュー監視: ポーリング開始');
+    queuePollingRef.current = setInterval(async () => {
+      try {
+        const status = await api.papers.processingStatus();
+        if (status.pending_jobs > 0 || status.processing_count > 0) {
+          console.log('[App] キュー監視: ジョブ処理中', {
+            pending_jobs: status.pending_jobs,
+            processing_count: status.processing_count,
+          });
+        } else {
+          // ジョブがゼロになったらポーリング停止
+          console.log('[App] キュー監視: ジョブ完了、ポーリング停止');
+          stopQueuePolling();
+        }
+      } catch (error) {
+        // エラーは無視
+      }
+    }, 10000);
+  }, [stopQueuePolling]);
+
+  // キュー処理状況を確認し、ジョブがあればポーリング開始
+  const checkQueueStatus = useCallback(async () => {
+    try {
+      const status = await api.papers.processingStatus();
+      if (status.pending_jobs > 0 || status.processing_count > 0) {
+        console.log('[App] キュー監視: ジョブ検出、ポーリング開始', {
+          pending_jobs: status.pending_jobs,
+          processing_count: status.processing_count,
+          worker_started: status.worker_started,
+        });
+        startQueuePolling();
+      }
+    } catch (error) {
+      // エラーは無視（ネットワークエラーなど）
+    }
+  }, [startQueuePolling]);
+
+  // コンポーネントマウント完了時に初回チェック（全ページ共通）
+  useEffect(() => {
+    checkQueueStatus();
+
+    // アンマウント時にクリーンアップ
+    return () => {
+      stopQueuePolling();
+    };
+  }, [checkQueueStatus, stopQueuePolling]);
+
+  // feeds-updatedイベントでキューをチェック（論文更新時）
+  useEffect(() => {
+    const handleFeedsUpdated = () => {
+      console.log('[App] フィード更新検出、キューをチェック');
+      checkQueueStatus();
+    };
+    window.addEventListener('feeds-updated', handleFeedsUpdated);
+    return () => {
+      window.removeEventListener('feeds-updated', handleFeedsUpdated);
+    };
+  }, [checkQueueStatus]);
 
   // 現在のページを取得
   const currentPage = routeToPage[location.pathname] || 'papers';

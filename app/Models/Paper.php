@@ -19,6 +19,7 @@ class Paper extends Model
         'full_text_source',
         'pdf_url',
         'pdf_path',
+        'pdf_status',
         'full_text_fetched_at',
         'url',
         'doi',

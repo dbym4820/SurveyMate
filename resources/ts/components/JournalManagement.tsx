@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Plus, RefreshCw, Edit,
-  ToggleLeft, ToggleRight, Loader2, FileText, Clock, Rss, Sparkles, Copy, Check, ExternalLink
+  ToggleLeft, ToggleRight, Loader2, FileText, Clock, Rss, Sparkles, ExternalLink
 } from 'lucide-react';
-import api, { getBasePath } from '../api';
+import api from '../api';
 import JournalModal from './JournalModal';
 import { RSS_URL_EXAMPLES } from '../constants';
 import { useToast } from './Toast';
@@ -18,27 +18,8 @@ export default function JournalManagement(): JSX.Element {
   const [showInactive, setShowInactive] = useState(false);
   const [fetchingJournal, setFetchingJournal] = useState<string | null>(null);
   const [regeneratingJournal, setRegeneratingJournal] = useState<string | null>(null);
-  const [copiedFeedUrl, setCopiedFeedUrl] = useState<string | null>(null);
 
-  // RSS配信URLを生成
-  const getFeedUrl = (feedToken: string): string => {
-    const basePath = getBasePath();
-    return `${window.location.origin}${basePath}/rss/${feedToken}`;
-  };
-
-  // URLをクリップボードにコピー
-  const copyFeedUrl = async (feedToken: string): Promise<void> => {
-    const url = getFeedUrl(feedToken);
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedFeedUrl(feedToken);
-      setTimeout(() => setCopiedFeedUrl(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy URL:', err);
-    }
-  };
-
-  // AI生成フィードを再生成
+  // AI生成フィードを再解析
   const handleRegenerateFeed = async (journal: Journal): Promise<void> => {
     setRegeneratingJournal(journal.id);
     try {
@@ -232,28 +213,6 @@ export default function JournalManagement(): JSX.Element {
                       )}
                       {journal.rss_url}
                     </div>
-                    {/* AI生成フィードURL */}
-                    {journal.source_type === 'ai_generated' && journal.generated_feed?.feed_token && (
-                      <div className="mt-2 flex items-center gap-2 overflow-hidden">
-                        <div className="flex-1 min-w-0 text-xs bg-gray-50 px-2 py-1 rounded font-mono overflow-hidden">
-                          <Rss className="w-3 h-3 inline mr-1 text-orange-500 flex-shrink-0" />
-                          <span className="truncate inline-block align-middle max-w-[calc(100%-1rem)]">
-                            {getFeedUrl(journal.generated_feed.feed_token)}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => copyFeedUrl(journal.generated_feed!.feed_token)}
-                          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                          title="URLをコピー"
-                        >
-                          {copiedFeedUrl === journal.generated_feed.feed_token ? (
-                            <Check className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <Copy className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   {/* アクション */}

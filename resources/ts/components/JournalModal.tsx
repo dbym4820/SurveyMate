@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { Plus, Edit, X, Check, Loader2, AlertCircle, TestTube, Sparkles, Rss, Copy, ArrowRight, FileText, Home, Search, File, HelpCircle } from 'lucide-react';
-import api, { getBasePath } from '../api';
+import { Plus, Edit, X, Check, Loader2, AlertCircle, TestTube, Sparkles, Rss, ArrowRight, FileText, Home, Search, File, HelpCircle } from 'lucide-react';
+import api from '../api';
 import { AVAILABLE_COLORS } from '../constants';
 import { useToast } from './Toast';
 import type { Journal, JournalFormData, RssTestResult, PageTestResult } from '../types';
@@ -38,27 +38,6 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
-  const [copiedUrl, setCopiedUrl] = useState(false);
-
-  // 生成されたRSS配信URLを取得
-  const getGeneratedFeedUrl = (): string | null => {
-    if (!journal?.generated_feed?.feed_token) return null;
-    const basePath = getBasePath();
-    return `${window.location.origin}${basePath}/rss/${journal.generated_feed.feed_token}`;
-  };
-
-  // URLをクリップボードにコピー
-  const copyFeedUrl = async (): Promise<void> => {
-    const url = getGeneratedFeedUrl();
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedUrl(true);
-      setTimeout(() => setCopiedUrl(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy URL:', err);
-    }
-  };
 
   // APIキー設定状態を確認
   useEffect(() => {
@@ -454,37 +433,6 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* AI生成RSS配信URL（編集時のみ，読み取り専用） */}
-          {isEdit && journal?.source_type === 'ai_generated' && getGeneratedFeedUrl() && (
-            <div className="overflow-hidden">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                RSS配信URL
-                <span className="ml-2 text-xs font-normal text-gray-500">（自動生成・変更不可）</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono overflow-hidden">
-                  <Rss className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                  <span className="truncate block">{getGeneratedFeedUrl()}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={copyFeedUrl}
-                  className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="URLをコピー"
-                >
-                  {copiedUrl ? (
-                    <Check className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                このURLをRSSリーダーに登録してください
-              </p>
             </div>
           )}
 

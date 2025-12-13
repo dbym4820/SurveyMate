@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText, History, RefreshCw, Download } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText, History, RefreshCw, Download, Clock } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
 import type { Paper, Summary, Tag as TagType, ChatMessage } from '../types';
@@ -10,7 +10,48 @@ interface PaperCardProps {
   hasAnyApiKey?: boolean;
 }
 
-export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: PaperCardProps): JSX.Element {
+// 論文データの比較関数（重要なプロパティのみ比較）
+function arePapersEqual(prevPaper: Paper, nextPaper: Paper): boolean {
+  // 基本プロパティの比較
+  if (
+    prevPaper.id !== nextPaper.id ||
+    prevPaper.title !== nextPaper.title ||
+    prevPaper.abstract !== nextPaper.abstract ||
+    prevPaper.pdf_status !== nextPaper.pdf_status ||
+    prevPaper.has_full_text !== nextPaper.has_full_text ||
+    prevPaper.has_local_pdf !== nextPaper.has_local_pdf ||
+    prevPaper.published_date !== nextPaper.published_date
+  ) {
+    return false;
+  }
+
+  // 要約の比較（IDリストで比較）
+  const prevSummaryIds = (prevPaper.summaries || []).map(s => s.id).join(',');
+  const nextSummaryIds = (nextPaper.summaries || []).map(s => s.id).join(',');
+  if (prevSummaryIds !== nextSummaryIds) {
+    return false;
+  }
+
+  // タグの比較（IDリストで比較）
+  const prevTagIds = (prevPaper.tags || []).map(t => t.id).join(',');
+  const nextTagIds = (nextPaper.tags || []).map(t => t.id).join(',');
+  if (prevTagIds !== nextTagIds) {
+    return false;
+  }
+
+  return true;
+}
+
+// propsの比較関数
+function arePropsEqual(prevProps: PaperCardProps, nextProps: PaperCardProps): boolean {
+  return (
+    arePapersEqual(prevProps.paper, nextProps.paper) &&
+    prevProps.hasAnyApiKey === nextProps.hasAnyApiKey
+    // onTagsChangeは関数なので比較しない（参照が変わっても動作は同じ）
+  );
+}
+
+function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperCardProps): JSX.Element {
   const { showToast } = useToast();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,6 +124,19 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
       setSummary(paper.summaries[0]);
     }
   }, [paper.summaries]);
+
+  // paper.has_local_pdfが変わったらpdfUrlとhasLocalPdfを更新
+  useEffect(() => {
+    setHasLocalPdf(paper.has_local_pdf || false);
+    setPdfUrl(
+      paper.has_local_pdf ? api.papers.getPdfUrl(paper.id) : (paper.pdf_url || null)
+    );
+  }, [paper.has_local_pdf, paper.pdf_url, paper.id]);
+
+  // paper.tagsが変わったらtagsを更新
+  useEffect(() => {
+    setTags(paper.tags || []);
+  }, [paper.tags]);
 
   const hasSummary = summary !== null || (paper.summaries && paper.summaries.length > 0);
 
@@ -449,6 +503,13 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                     要約済
                   </span>
                 )}
+                {/* PDF処理中インジケーター */}
+                {(paper.pdf_status === 'pending' || paper.pdf_status === 'processing') && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1" title="PDFを取得中...">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    PDF取得中
+                  </span>
+                )}
               </div>
 
               {/* タグ（右上） */}
@@ -699,6 +760,17 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                   <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">PDF</span>
                 </a>
+              )}
+
+              {/* PDF取得中のプレースホルダー（処理中でPDFがまだない場合） */}
+              {(paper.pdf_status === 'pending' || paper.pdf_status === 'processing') && !paper.has_local_pdf && !hasLocalPdf && (
+                <span
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-amber-600 bg-amber-50 rounded-lg cursor-not-allowed"
+                  title="PDFを取得中..."
+                >
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-pulse" />
+                  <span className="hidden sm:inline">PDF取得中</span>
+                </span>
               )}
 
               <a
@@ -1164,3 +1236,7 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
     </div>
   );
 }
+
+// React.memoでメモ化してexport
+const PaperCard = memo(PaperCardComponent, arePropsEqual);
+export default PaperCard;

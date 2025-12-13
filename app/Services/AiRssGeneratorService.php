@@ -301,26 +301,49 @@ PROMPT;
         // Convert CSS selector to XPath (simplified conversion)
         $containerXpath = $this->cssToXpath($selectors['paper_container'] ?? '');
         if (empty($containerXpath)) {
-            return ['success' => false, 'error' => 'Invalid container selector'];
+            Log::warning('Invalid container selector', ['selector' => $selectors['paper_container'] ?? '']);
+            return ['success' => false, 'error' => 'Invalid container selector: ' . ($selectors['paper_container'] ?? 'empty')];
         }
+
+        Log::debug('Parsing with selectors', [
+            'container_css' => $selectors['paper_container'] ?? '',
+            'container_xpath' => $containerXpath,
+            'title_css' => $selectors['title'] ?? '',
+        ]);
 
         $papers = [];
         $containers = $xpath->query($containerXpath);
 
         if ($containers === false || $containers->length === 0) {
-            return ['success' => false, 'error' => 'No paper containers found'];
+            Log::warning('No paper containers found', [
+                'xpath' => $containerXpath,
+                'html_length' => strlen($html),
+            ]);
+            return ['success' => false, 'error' => 'No paper containers found with selector: ' . ($selectors['paper_container'] ?? '')];
         }
 
+        Log::debug('Found containers', ['count' => $containers->length]);
+
+        $skippedCount = 0;
         foreach ($containers as $container) {
             $paper = $this->extractPaperFromContainer($xpath, $container, $selectors, $baseUrl);
             if ($paper && !empty($paper['title'])) {
                 $papers[] = $paper;
+            } else {
+                $skippedCount++;
             }
         }
+
+        Log::debug('Parsing result', [
+            'papers_found' => count($papers),
+            'skipped' => $skippedCount,
+        ]);
 
         return [
             'success' => true,
             'papers' => $papers,
+            'containers_found' => $containers->length,
+            'skipped' => $skippedCount,
         ];
     }
 
@@ -429,8 +452,9 @@ PROMPT;
         }
 
         // Default DOI pattern: 10.XXXX/... (with various allowed characters)
-        $defaultPattern = '/10\.\d{4,}\/[^\s"\'<>]+/';
-        $usePattern = $pattern ? '/' . $pattern . '/' : $defaultPattern;
+        // Use # as delimiter to avoid conflicts with / in patterns
+        $defaultPattern = '#10\.\d{4,}/[^\s"\'<>]+#';
+        $usePattern = $pattern ? '#' . $pattern . '#' : $defaultPattern;
 
         if (preg_match($usePattern, $raw, $matches)) {
             // Clean up trailing punctuation
@@ -475,11 +499,7 @@ PROMPT;
         $isFirst = true;
 
         foreach ($parts as $part) {
-            $part = trim($part);
-            if (empty($part)) {
-                continue;
-            }
-
+            // Check combinators BEFORE trimming (space gets lost after trim)
             // Check if this is a child combinator (>)
             if ($part === '>' || preg_match('/^\s*>\s*$/', $part)) {
                 $xpath .= '/';
@@ -490,6 +510,12 @@ PROMPT;
             // After splitting, a space-only part means descendant
             if (preg_match('/^\s+$/', $part)) {
                 $xpath .= '//';
+                continue;
+            }
+
+            // Now safe to trim and skip empty
+            $part = trim($part);
+            if (empty($part)) {
                 continue;
             }
 
@@ -584,7 +610,7 @@ PROMPT;
     }
 
     /**
-     * Parse various date formats
+     * Parse various date formats from text (may contain additional text around the date)
      */
     private function parseDate(string $dateText): ?string
     {
@@ -592,26 +618,39 @@ PROMPT;
             return null;
         }
 
-        // Try various formats
-        $formats = [
-            'Y-m-d',
-            'Y/m/d',
-            'Y年m月d日',
-            'd M Y',
-            'M d, Y',
-            'F d, Y',
+        // First, try to extract date patterns from the text using regex
+        $patterns = [
+            // YYYY/MM/DD or YYYY-MM-DD (common formats)
+            '/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/' => function ($m) {
+                return sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
+            },
+            // YYYY年MM月DD日 (Japanese format)
+            '/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/' => function ($m) {
+                return sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
+            },
+            // DD Month YYYY or Month DD, YYYY (English formats)
+            '/(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})/i' => function ($m) {
+                $timestamp = strtotime("{$m[2]} {$m[1]}, {$m[3]}");
+                return $timestamp ? date('Y-m-d', $timestamp) : null;
+            },
+            '/(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})/i' => function ($m) {
+                $timestamp = strtotime("{$m[1]} {$m[2]}, {$m[3]}");
+                return $timestamp ? date('Y-m-d', $timestamp) : null;
+            },
         ];
 
-        foreach ($formats as $format) {
-            $date = \DateTime::createFromFormat($format, $dateText);
-            if ($date) {
-                return $date->format('Y-m-d');
+        foreach ($patterns as $pattern => $formatter) {
+            if (preg_match($pattern, $dateText, $matches)) {
+                $result = $formatter($matches);
+                if ($result) {
+                    return $result;
+                }
             }
         }
 
-        // Try strtotime as fallback
+        // Try strtotime as fallback (works for many English date formats)
         $timestamp = strtotime($dateText);
-        if ($timestamp) {
+        if ($timestamp && $timestamp > strtotime('1990-01-01')) {
             return date('Y-m-d', $timestamp);
         }
 
@@ -752,70 +791,216 @@ PROMPT;
     }
 
     /**
-     * Generate RSS XML from extracted papers
+     * Extract papers from HTML using AI
+     * AI handles all data extraction and normalization
      */
-    public function generateRssXml(array $papers, Journal $journal, string $sourceUrl): string
+    public function extractPapersWithAi(string $html, string $url): array
     {
-        $pubDate = date('r');
-
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        $xml .= '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/">' . "\n";
-        $xml .= '<channel>' . "\n";
-        $xml .= '  <title>' . htmlspecialchars($journal->name) . '</title>' . "\n";
-        $xml .= '  <link>' . htmlspecialchars($sourceUrl) . '</link>' . "\n";
-        $xml .= '  <description>Auto-generated RSS feed for ' . htmlspecialchars($journal->name) . '</description>' . "\n";
-        $xml .= '  <language>ja</language>' . "\n";
-        $xml .= '  <lastBuildDate>' . $pubDate . '</lastBuildDate>' . "\n";
-        $xml .= '  <generator>SurveyMate RSS Generator</generator>' . "\n";
-
-        foreach ($papers as $paper) {
-            $title = htmlspecialchars($paper['title'] ?? 'Untitled');
-            $link = htmlspecialchars($paper['url'] ?? $sourceUrl);
-            $description = htmlspecialchars($paper['abstract'] ?? '');
-            $authors = is_array($paper['authors'] ?? null) ? implode(', ', $paper['authors']) : '';
-            $doi = $paper['doi'] ?? null;
-            $pubDateItem = !empty($paper['published_date'])
-                ? date('r', strtotime($paper['published_date']))
-                : $pubDate;
-
-            $xml .= '  <item>' . "\n";
-            $xml .= '    <title>' . $title . '</title>' . "\n";
-            $xml .= '    <link>' . $link . '</link>' . "\n";
-            if ($description) {
-                $xml .= '    <description>' . $description . '</description>' . "\n";
-            }
-            if ($authors) {
-                $xml .= '    <author>' . htmlspecialchars($authors) . '</author>' . "\n";
-                // Also add dc:creator for each author
-                foreach ($paper['authors'] ?? [] as $author) {
-                    $xml .= '    <dc:creator>' . htmlspecialchars(trim($author)) . '</dc:creator>' . "\n";
-                }
-            }
-            if ($doi) {
-                $xml .= '    <dc:identifier>doi:' . htmlspecialchars($doi) . '</dc:identifier>' . "\n";
-                $xml .= '    <prism:doi>' . htmlspecialchars($doi) . '</prism:doi>' . "\n";
-            }
-            $xml .= '    <pubDate>' . $pubDateItem . '</pubDate>' . "\n";
-            // Use DOI as guid if available, otherwise use link
-            if ($doi) {
-                $xml .= '    <guid isPermaLink="false">doi:' . htmlspecialchars($doi) . '</guid>' . "\n";
-            } else {
-                $xml .= '    <guid isPermaLink="true">' . $link . '</guid>' . "\n";
-            }
-            $xml .= '  </item>' . "\n";
+        $provider = $this->getPreferredProvider();
+        if (!$provider) {
+            return [
+                'success' => false,
+                'error' => 'No AI API key configured',
+            ];
         }
 
-        $xml .= '</channel>' . "\n";
-        $xml .= '</rss>';
+        $prompt = $this->buildPaperExtractionPrompt($html, $url);
 
-        return $xml;
+        try {
+            if ($provider === 'claude') {
+                $result = $this->callClaudeForExtraction($prompt);
+            } else {
+                $result = $this->callOpenAIForExtraction($prompt);
+            }
+
+            $papers = $result['papers'] ?? [];
+
+            if (empty($papers)) {
+                return [
+                    'success' => false,
+                    'error' => $result['error'] ?? 'No papers extracted from page',
+                    'provider' => $provider,
+                ];
+            }
+
+            // Normalize paper data
+            $normalizedPapers = array_map(function ($paper) use ($url) {
+                return [
+                    'title' => $paper['title'] ?? null,
+                    'url' => isset($paper['url']) ? $this->resolveUrl($paper['url'], $url) : null,
+                    'authors' => $paper['authors'] ?? [],
+                    'abstract' => $paper['abstract'] ?? null,
+                    'published_date' => $paper['published_date'] ?? null,
+                    'doi' => $paper['doi'] ?? null,
+                ];
+            }, $papers);
+
+            // Filter out papers without titles
+            $normalizedPapers = array_filter($normalizedPapers, fn($p) => !empty($p['title']));
+
+            return [
+                'success' => true,
+                'papers' => array_values($normalizedPapers),
+                'papers_count' => count($normalizedPapers),
+                'provider' => $provider,
+            ];
+        } catch (\Exception $e) {
+            Log::error('AI paper extraction failed', [
+                'url' => $url,
+                'provider' => $provider,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'provider' => $provider,
+            ];
+        }
     }
 
     /**
-     * Test fetching feed using saved selectors (no AI)
-     * Returns paper count without generating/storing RSS
+     * Build prompt for paper extraction
      */
-    public function fetchFeed(Journal $journal): array
+    private function buildPaperExtractionPrompt(string $html, string $url): string
+    {
+        return <<<PROMPT
+以下のHTMLから学術論文の一覧を抽出し、JSON形式で返してください。
+
+【URL】
+{$url}
+
+【HTML】
+{$html}
+
+以下のJSON形式で回答してください：
+{
+  "papers": [
+    {
+      "title": "論文タイトル（必須）",
+      "url": "論文の詳細ページURL（相対URLでも可）",
+      "authors": ["著者1", "著者2"],
+      "abstract": "論文の概要・要旨（あれば）",
+      "published_date": "公開日（YYYY-MM-DD形式に正規化）",
+      "doi": "DOI（10.XXXX/... 形式、あれば）"
+    }
+  ],
+  "error": "エラーがあれば記載"
+}
+
+重要な指示：
+- 論文一覧ページから各論文の情報を抽出してください
+- 日付は必ず YYYY-MM-DD 形式に変換してください（例：2025年10月1日 → 2025-10-01）
+- DOIは "10." で始まる部分のみを抽出してください（URLの場合は10.以降）
+- 著者名は配列で返してください
+- 論文以外のコンテンツ（広告、ナビゲーション等）は除外してください
+- 抽出できた論文のみを含めてください（推測で情報を追加しないでください）
+- JSON形式のみで回答し、他のテキストは含めないでください
+PROMPT;
+    }
+
+    /**
+     * Call Claude API for paper extraction
+     */
+    private function callClaudeForExtraction(string $prompt): array
+    {
+        $apiKey = null;
+        if ($this->user && $this->user->hasClaudeApiKey()) {
+            $apiKey = $this->user->claude_api_key;
+        } elseif (config('services.ai.admin_claude_api_key')) {
+            $apiKey = config('services.ai.admin_claude_api_key');
+        } else {
+            $apiKey = config('services.ai.claude_api_key');
+        }
+
+        if (!$apiKey) {
+            throw new \Exception('Claude API key is not configured');
+        }
+
+        $model = $this->user->preferred_claude_model ?? config('services.ai.claude_default_model', 'claude-sonnet-4-20250514');
+
+        $response = Http::withHeaders([
+            'x-api-key' => $apiKey,
+            'anthropic-version' => '2023-06-01',
+            'Content-Type' => 'application/json',
+        ])->timeout(120)->post(self::CLAUDE_API_URL, [
+            'model' => $model,
+            'max_tokens' => 8000,
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ]);
+
+        if (!$response->successful()) {
+            throw new \Exception('Claude API request failed: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $content = $data['content'][0]['text'] ?? '';
+
+        return $this->parseJsonResponse($content);
+    }
+
+    /**
+     * Call OpenAI API for paper extraction
+     */
+    private function callOpenAIForExtraction(string $prompt): array
+    {
+        $apiKey = null;
+        if ($this->user && $this->user->hasOpenaiApiKey()) {
+            $apiKey = $this->user->openai_api_key;
+        } elseif (config('services.ai.admin_openai_api_key')) {
+            $apiKey = config('services.ai.admin_openai_api_key');
+        } else {
+            $apiKey = config('services.ai.openai_api_key');
+        }
+
+        if (!$apiKey) {
+            throw new \Exception('OpenAI API key is not configured');
+        }
+
+        $model = $this->user->preferred_openai_model ?? config('services.ai.openai_default_model', 'gpt-4o');
+
+        // Automatically upgrade to gpt-4o-mini for larger context
+        if ($model === 'gpt-3.5-turbo') {
+            $model = 'gpt-4o-mini';
+            Log::info('Upgraded model to gpt-4o-mini for paper extraction (gpt-3.5-turbo context too small)');
+        }
+
+        $requestBody = [
+            'model' => $model,
+            'temperature' => 0.1,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are an expert at extracting structured data from academic journal web pages. Always respond in valid JSON format.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ];
+
+        if ($this->isNewOpenAIModel($model)) {
+            $requestBody['max_completion_tokens'] = 8000;
+        } else {
+            $requestBody['max_tokens'] = 8000;
+        }
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(120)->post(self::OPENAI_API_URL, $requestBody);
+
+        if (!$response->successful()) {
+            throw new \Exception('OpenAI API request failed: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $content = $data['choices'][0]['message']['content'] ?? '';
+
+        return $this->parseJsonResponse($content);
+    }
+
+    /**
+     * Fetch papers using saved selectors (no AI needed)
+     * Returns parsed papers array
+     */
+    public function fetchPapers(Journal $journal): array
     {
         $feed = GeneratedFeed::where('journal_id', $journal->id)->first();
 
@@ -856,13 +1041,23 @@ PROMPT;
 
         $papers = $parseResult['papers'] ?? [];
         if (empty($papers)) {
+            $containersFound = $parseResult['containers_found'] ?? 0;
+            $skipped = $parseResult['skipped'] ?? 0;
+            $errorDetail = $containersFound > 0
+                ? "Found {$containersFound} containers but could not extract titles from any ({$skipped} skipped). Check title selector."
+                : 'No paper containers found. Page structure may have changed.';
             return [
                 'success' => false,
-                'error' => 'No papers found. Page structure may have changed.',
+                'error' => $errorDetail,
+                'debug' => [
+                    'containers_found' => $containersFound,
+                    'skipped' => $skipped,
+                    'selectors' => $selectors,
+                ],
             ];
         }
 
-        // Update feed status (but NOT rss_xml - that's generated dynamically)
+        // Update feed status
         $feed->update([
             'generation_status' => 'success',
             'last_generated_at' => now(),
@@ -871,49 +1066,15 @@ PROMPT;
 
         return [
             'success' => true,
+            'papers' => $papers,
             'papers_count' => count($papers),
-            'feed_token' => $feed->feed_token,
-            'method' => 'selector',
         ];
     }
 
     /**
-     * Generate RSS XML dynamically for serving (called on every RSS request)
-     * This does NOT store the result - it's generated fresh each time
-     */
-    public function generateRssDynamically(GeneratedFeed $feed): string
-    {
-        $journal = $feed->journal;
-        $selectors = $feed->extraction_config['selectors'] ?? null;
-        $baseUrl = $feed->extraction_config['base_url'] ?? $feed->source_url;
-
-        if (empty($selectors) || empty($selectors['paper_container'])) {
-            throw new \Exception('No selectors configured');
-        }
-
-        // Fetch the source page
-        $pageResult = $this->fetchWebPage($feed->source_url, false);
-        if (!$pageResult['success']) {
-            throw new \Exception('Failed to fetch source page: ' . ($pageResult['error'] ?? 'Unknown error'));
-        }
-
-        // Parse using saved selectors
-        $parseResult = $this->parsePageWithSelectors($pageResult['html'], $selectors, $baseUrl);
-        if (!$parseResult['success']) {
-            throw new \Exception('Failed to parse page: ' . ($parseResult['error'] ?? 'Unknown error'));
-        }
-
-        $papers = $parseResult['papers'] ?? [];
-        if (empty($papers)) {
-            throw new \Exception('No papers found. Page structure may have changed.');
-        }
-
-        // Generate RSS XML dynamically
-        return $this->generateRssXml($papers, $journal, $feed->source_url);
-    }
-
-    /**
-     * Initial feed setup with AI structure analysis
+     * Initial feed setup for AI-generated journal
+     * Creates GeneratedFeed record and verifies page can be fetched
+     * Actual paper extraction is done by RssFetcherService::fetchJournal
      */
     public function setupFeed(Journal $journal, User $user): array
     {
@@ -937,7 +1098,7 @@ PROMPT;
         $feed->generation_status = 'pending';
         $feed->save();
 
-        // Fetch page (cleaned for AI)
+        // Verify page can be fetched
         $pageResult = $this->fetchWebPage($journal->rss_url, true);
         if (!$pageResult['success']) {
             $feed->markAsError('Failed to fetch page: ' . ($pageResult['error'] ?? 'Unknown error'));
@@ -947,79 +1108,34 @@ PROMPT;
             ];
         }
 
-        // Analyze structure with AI
-        $analysisResult = $this->analyzePageStructure($pageResult['html'], $journal->rss_url);
-        if (!$analysisResult['success']) {
-            $feed->markAsError('AI analysis failed: ' . ($analysisResult['error'] ?? 'Unknown error'));
-            return [
-                'success' => false,
-                'error' => $analysisResult['error'],
-            ];
-        }
-
-        // Save selectors to extraction_config
-        $extractionConfig = [
-            'selectors' => $analysisResult['selectors'],
-            'base_url' => $analysisResult['selectors']['base_url'] ?? $journal->rss_url,
-            'analyzed_at' => now()->toISOString(),
-            'ai_provider' => $analysisResult['provider'],
-        ];
-
-        // Now fetch using the new selectors to generate initial RSS
-        $pageResultRaw = $this->fetchWebPage($journal->rss_url, false);
-        if (!$pageResultRaw['success']) {
-            $feed->markAsError('Failed to fetch page for parsing');
-            return ['success' => false, 'error' => 'Failed to fetch page'];
-        }
-
-        $parseResult = $this->parsePageWithSelectors(
-            $pageResultRaw['html'],
-            $analysisResult['selectors'],
-            $extractionConfig['base_url']
-        );
-
-        if (!$parseResult['success'] || empty($parseResult['papers'])) {
-            // Fall back to sample papers from AI if direct parsing fails
-            $papers = $analysisResult['sample_papers'] ?? [];
-            if (empty($papers)) {
-                $feed->markAsError('Could not extract papers with detected selectors');
-                return [
-                    'success' => false,
-                    'error' => 'Could not extract papers with detected selectors',
-                ];
-            }
-        } else {
-            $papers = $parseResult['papers'];
-        }
-
-        // Save only the selectors (NOT the RSS XML - that's generated dynamically on each request)
+        // Save basic config (no selectors needed - AI extracts directly)
         $feed->update([
-            'extraction_config' => $extractionConfig,
-            'generation_status' => 'success',
-            'last_generated_at' => now(),
+            'extraction_config' => [
+                'base_url' => $journal->rss_url,
+                'setup_at' => now()->toISOString(),
+                'ai_provider' => $this->getPreferredProvider(),
+            ],
+            'generation_status' => 'pending',
             'error_message' => null,
-            'rss_xml' => null,  // Clear any old cached XML
         ]);
 
         return [
             'success' => true,
-            'papers_count' => count($papers),
-            'feed_token' => $feed->feed_token,
-            'provider' => $analysisResult['provider'],
-            'method' => 'ai_setup',
+            'message' => 'Feed setup complete. Ready for AI extraction.',
+            'provider' => $this->getPreferredProvider(),
         ];
     }
 
     /**
-     * Generate feed - uses selectors if available, otherwise runs AI setup
+     * Analyze and fetch papers - uses selectors if available, otherwise runs AI setup
      */
-    public function generateFeed(Journal $journal, User $user): array
+    public function analyzeAndFetchPapers(Journal $journal, User $user): array
     {
         $feed = GeneratedFeed::where('journal_id', $journal->id)->first();
 
         // If we have valid selectors, use them
         if ($feed && !empty($feed->extraction_config['selectors'])) {
-            return $this->fetchFeed($journal);
+            return $this->fetchPapers($journal);
         }
 
         // Otherwise, run initial AI setup

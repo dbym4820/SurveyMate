@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\Journal;
 use App\Models\Paper;
 use App\Models\FetchLog;
+use App\Models\GeneratedFeed;
+use App\Jobs\ProcessPaperFullTextJob;
+use App\Services\QueueRunnerService;
 use Illuminate\Support\Facades\Log;
 use SimplePie\SimplePie;
 
@@ -17,11 +20,13 @@ class RssFetcherService
     private $lastRunTime = null;
 
     private FullTextFetcherService $fullTextFetcher;
+    private AiRssGeneratorService $aiRssGenerator;
     private bool $fullTextEnabled;
 
-    public function __construct(FullTextFetcherService $fullTextFetcher)
+    public function __construct(FullTextFetcherService $fullTextFetcher, AiRssGeneratorService $aiRssGenerator)
     {
         $this->fullTextFetcher = $fullTextFetcher;
+        $this->aiRssGenerator = $aiRssGenerator;
         $this->fullTextEnabled = config('surveymate.full_text.enabled', true);
     }
 
@@ -93,6 +98,12 @@ class RssFetcherService
         $startTime = microtime(true);
 
         try {
+            // AI生成フィードの場合は別処理
+            if ($journal->isAiGenerated()) {
+                Log::info("Fetching AI-generated feed for journal: {$journal->name}");
+                return $this->fetchAiGeneratedJournal($journal, $startTime);
+            }
+
             Log::info("Fetching RSS for journal: {$journal->name}");
 
             $feed = new SimplePie();
@@ -138,6 +149,11 @@ class RssFetcherService
 
             Log::info("Fetched {$papersFetched} papers ({$newPapers} new, {$fullTextFetched} full text) for {$journal->name}");
 
+            // PDF処理ジョブがあればワーカーを起動
+            if ($fullTextFetched > 0) {
+                $this->ensureQueueWorkerRunning();
+            }
+
             return [
                 'status' => 'success',
                 'papers_fetched' => $papersFetched,
@@ -157,6 +173,128 @@ class RssFetcherService
                 'status' => 'error',
                 'error' => $e->getMessage(),
                 'execution_time_ms' => $executionTimeMs,
+            ];
+        }
+    }
+
+    /**
+     * AI生成フィードの取得処理
+     * AIを使ってHTMLから論文情報を抽出・整形して保存する
+     */
+    private function fetchAiGeneratedJournal(Journal $journal, float $startTime): array
+    {
+        try {
+            // GeneratedFeedレコードを取得（ユーザー情報取得用）
+            $generatedFeed = GeneratedFeed::where('journal_id', $journal->id)->first();
+
+            if (!$generatedFeed) {
+                throw new \Exception('AI generated feed configuration not found. Please regenerate the feed.');
+            }
+
+            // ユーザー情報を取得してAIサービスに設定
+            $user = $generatedFeed->user;
+            if (!$user) {
+                throw new \Exception('User not found for AI generated feed.');
+            }
+            $this->aiRssGenerator->setUser($user);
+
+            // ソースページをフェッチ（AIに渡すためクリーニング）
+            $pageResult = $this->aiRssGenerator->fetchWebPage($journal->rss_url, true);
+            if (!$pageResult['success']) {
+                throw new \Exception('Failed to fetch source page: ' . ($pageResult['error'] ?? 'Unknown error'));
+            }
+
+            // AIで論文情報を抽出・整形
+            $extractResult = $this->aiRssGenerator->extractPapersWithAi($pageResult['html'], $journal->rss_url);
+            if (!$extractResult['success']) {
+                throw new \Exception('AI extraction failed: ' . ($extractResult['error'] ?? 'Unknown error'));
+            }
+
+            $papers = $extractResult['papers'] ?? [];
+            $papersFetched = count($papers);
+            $newPapers = 0;
+            $fullTextFetched = 0;
+
+            // 抽出した論文情報をデータベースに保存
+            foreach ($papers as $paperData) {
+                if (empty($paperData['title'])) {
+                    continue;
+                }
+
+                $data = [
+                    'journal_id' => $journal->id,
+                    'external_id' => $paperData['doi'] ?? $paperData['url'] ?? null,
+                    'title' => $paperData['title'],
+                    'authors' => $paperData['authors'] ?? [],
+                    'abstract' => $paperData['abstract'] ?? null,
+                    'url' => $paperData['url'] ?? null,
+                    'doi' => $paperData['doi'] ?? null,
+                    'published_date' => $paperData['published_date'] ?? null,
+                ];
+
+                $result = $this->upsertPaper($data);
+                if ($result['inserted']) {
+                    $newPapers++;
+
+                    // 新規論文の本文取得（有効な場合）
+                    if ($this->fullTextEnabled && $result['paper']) {
+                        $ftResult = $this->fetchFullTextForPaper($result['paper']);
+                        if ($ftResult) {
+                            $fullTextFetched++;
+                        }
+                    }
+                }
+            }
+
+            $executionTimeMs = (int)((microtime(true) - $startTime) * 1000);
+
+            // Update last fetched
+            $journal->update(['last_fetched_at' => now()]);
+
+            // GeneratedFeedのステータス更新
+            $generatedFeed->update([
+                'generation_status' => 'success',
+                'last_generated_at' => now(),
+                'error_message' => null,
+            ]);
+
+            // Log success
+            FetchLog::logSuccess($journal->id, $papersFetched, $newPapers, $executionTimeMs);
+
+            Log::info("Fetched {$papersFetched} papers ({$newPapers} new, {$fullTextFetched} full text) for AI-generated feed {$journal->name} via AI extraction");
+
+            // PDF処理ジョブがあればワーカーを起動
+            if ($fullTextFetched > 0) {
+                $this->ensureQueueWorkerRunning();
+            }
+
+            return [
+                'status' => 'success',
+                'papers_fetched' => $papersFetched,
+                'new_papers' => $newPapers,
+                'full_text_fetched' => $fullTextFetched,
+                'execution_time_ms' => $executionTimeMs,
+                'source_type' => 'ai_generated',
+                'ai_provider' => $extractResult['provider'] ?? null,
+            ];
+
+        } catch (\Exception $e) {
+            $executionTimeMs = (int)((microtime(true) - $startTime) * 1000);
+
+            Log::error("Error fetching AI-generated feed for {$journal->name}: {$e->getMessage()}");
+
+            // GeneratedFeedのエラーステータス更新
+            if (isset($generatedFeed)) {
+                $generatedFeed->markAsError($e->getMessage());
+            }
+
+            FetchLog::logError($journal->id, $e->getMessage(), $executionTimeMs);
+
+            return [
+                'status' => 'error',
+                'error' => $e->getMessage(),
+                'execution_time_ms' => $executionTimeMs,
+                'source_type' => 'ai_generated',
             ];
         }
     }
@@ -281,33 +419,44 @@ class RssFetcherService
     }
 
     /**
-     * 論文の本文を取得して保存
+     * 論文の本文取得ジョブをキューに追加
+     * PDF解析は時間がかかるため非同期で処理
+     * @return bool ジョブがディスパッチされたかどうか
      */
     private function fetchFullTextForPaper(Paper $paper): bool
     {
-        $result = $this->fullTextFetcher->fetchFullText($paper);
+        try {
+            // ステータスを「待機中」に設定
+            $paper->update(['pdf_status' => 'pending']);
 
-        if ($result['success']) {
-            $updateData = [
-                'full_text' => $result['text'],
-                'full_text_source' => $result['source'],
-                'full_text_fetched_at' => now(),
-            ];
+            // ジョブをキューにディスパッチ（非同期処理）
+            ProcessPaperFullTextJob::dispatch($paper->id);
+            Log::debug("Dispatched PDF processing job for paper {$paper->id}");
 
-            // PDF URLとパスを保存
-            if (!empty($result['pdf_url'])) {
-                $updateData['pdf_url'] = $result['pdf_url'];
-            }
-            if (!empty($result['pdf_path'])) {
-                $updateData['pdf_path'] = $result['pdf_path'];
-            }
-
-            $paper->update($updateData);
             return true;
+        } catch (\Exception $e) {
+            Log::error("Failed to dispatch PDF processing job for paper {$paper->id}: " . $e->getMessage());
+            // 失敗した場合はステータスをリセット
+            $paper->update(['pdf_status' => null]);
+            return false;
         }
+    }
 
-        Log::debug("Full text fetch failed for paper {$paper->id}: {$result['error']}");
-        return false;
+    /**
+     * キューワーカーを起動（RSS取得完了後に呼び出す）
+     */
+    private function ensureQueueWorkerRunning(): void
+    {
+        try {
+            if (QueueRunnerService::hasPendingJobs('pdf-processing')) {
+                $started = QueueRunnerService::startWorkerIfNeeded('pdf-processing');
+                if ($started) {
+                    Log::info("Queue worker started for PDF processing");
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to start queue worker: " . $e->getMessage());
+        }
     }
 
     private function upsertPaper(array $data): array
