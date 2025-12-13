@@ -96,7 +96,8 @@ ADMIN_PASSWORD=your_secure_password
 ADMIN_EMAIL=admin@example.com
 
 # 新規ユーザー用デフォルト論文誌（任意）
-# 形式: 名前|RSS_URL（複数はカンマ区切り）
+# 形式: 名前|RSS_URL（複数はセミコロン区切り，空白含む名前はクォートで囲む）
+# 例: DEFAULT_JOURNALS="International Journal of AIED|https://...;Journal Name|https://..."
 DEFAULT_JOURNALS=
 ```
 

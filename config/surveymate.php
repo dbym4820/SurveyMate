@@ -4,14 +4,16 @@
 |--------------------------------------------------------------------------
 | Default Journals from .env (optional)
 |--------------------------------------------------------------------------
-| Format: NAME|RSS_URL,NAME2|RSS_URL2,...
-| Example: IJAIED|https://link.springer.com/search.rss?facet-content-type=Article&facet-journal-id=40593
+| Format: NAME|RSS_URL;NAME2|RSS_URL2;...
+| (セミコロン区切り，ジャーナル名に空白を含むことが可能)
+| Example: "International Journal of Artificial Intelligence in Education|https://link.springer.com/search.rss?facet-journal-id=40593"
 */
 $defaultJournals = [];
 $envJournals = env('DEFAULT_JOURNALS', '');
 
 if (!empty($envJournals)) {
-    $entries = array_filter(array_map('trim', explode(',', $envJournals)));
+    // セミコロンで区切る（ジャーナル名に空白やカンマを含むことが可能）
+    $entries = array_filter(array_map('trim', explode(';', $envJournals)));
     foreach ($entries as $entry) {
         $parts = explode('|', $entry, 2);
         if (count($parts) === 2) {
@@ -44,7 +46,8 @@ return [
     | Default Journals for New Users
     |--------------------------------------------------------------------------
     |
-    | Set via .env: DEFAULT_JOURNALS="NAME|RSS_URL,NAME2|RSS_URL2"
+    | Set via .env: DEFAULT_JOURNALS="NAME|RSS_URL;NAME2|RSS_URL2"
+    | (セミコロン区切り，ジャーナル名に空白を含むことが可能)
     | Leave empty for no default journals.
     |
     */

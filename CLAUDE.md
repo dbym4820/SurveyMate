@@ -229,6 +229,7 @@ ADMIN_PASSWORD=secure_password
 ADMIN_EMAIL=admin@example.com
 
 # 新規ユーザー用デフォルト論文誌（任意）
+# 形式: "名前|RSS_URL;名前2|RSS_URL2" （セミコロン区切り，空白含む名前はクォートで囲む）
 DEFAULT_JOURNALS=
 
 # Web Push通知（任意）
