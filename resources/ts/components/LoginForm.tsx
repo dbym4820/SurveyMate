@@ -4,6 +4,7 @@ import { LogIn, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react
 import { getBasePath } from '../api';
 import api from '../api';
 import type { User } from '../types';
+import TermsModal from './TermsModal';
 
 type FormMode = 'login' | 'register';
 
@@ -22,6 +23,7 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   const validateRegistration = (): string | null => {
     if (userId.length < 3 || userId.length > 50) {
@@ -265,10 +267,28 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
           </p>
         )}
 
+        {mode === 'register' && (
+          <p className="mt-4 text-center text-xs text-gray-500">
+            登録することで，
+            <button
+              type="button"
+              onClick={() => setShowTermsModal(true)}
+              className="text-gray-700 underline hover:text-gray-900"
+            >
+              利用規約
+            </button>
+            に同意したものとみなされます．
+          </p>
+        )}
+
         <p className="mt-4 text-center text-[10px] text-gray-400">
           ※ このシステムは予告なく仕様変更・データのリセットを実施する場合があります
         </p>
       </div>
+
+      {showTermsModal && (
+        <TermsModal onClose={() => setShowTermsModal(false)} />
+      )}
     </div>
   );
 }
