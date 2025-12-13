@@ -39,9 +39,9 @@ class AiSummaryService
     {
         $providers = [];
 
-        // Check user's API keys first, then fall back to system config
-        $hasClaudeKey = ($this->user && $this->user->hasClaudeApiKey()) || config('services.ai.claude_api_key');
-        $hasOpenaiKey = ($this->user && $this->user->hasOpenaiApiKey()) || config('services.ai.openai_api_key');
+        // Check user's effective API keys (includes admin env fallback for admin users)
+        $hasClaudeKey = $this->user && $this->user->hasEffectiveClaudeApiKey();
+        $hasOpenaiKey = $this->user && $this->user->hasEffectiveOpenaiApiKey();
 
         // OpenAI first (default provider)
         if ($hasOpenaiKey) {
@@ -54,6 +54,7 @@ class AiSummaryService
                 'models' => $openaiModels,
                 'default_model' => config('services.ai.openai_default_model', 'gpt-4o'),
                 'user_key' => $this->user && $this->user->hasOpenaiApiKey(),
+                'from_env' => $this->user && $this->user->isOpenaiApiKeyFromEnv(),
             ];
         }
 
@@ -67,6 +68,7 @@ class AiSummaryService
                 'models' => $claudeModels,
                 'default_model' => config('services.ai.claude_default_model', 'claude-sonnet-4-20250514'),
                 'user_key' => $this->user && $this->user->hasClaudeApiKey(),
+                'from_env' => $this->user && $this->user->isClaudeApiKeyFromEnv(),
             ];
         }
 
@@ -149,24 +151,22 @@ PROMPT;
         $summaryTemplate = $this->user ? $this->user->summary_template : null;
 
         if (!empty($summaryTemplate)) {
-            // ユーザー定義のテンプレートがある場合はそれを使用
+            // ユーザー定義のテンプレートがある場合は，テンプレートに完全に従う
             $prompt .= <<<PROMPT
 
 【要約形式の指定】
+以下の指定に従って要約を作成してください：
+
 {$summaryTemplate}
 
-上記の指定に従って要約を作成し，以下の形式のJSONで回答してください：
+以下の形式のJSONで回答してください：
 {
-  "summary_text": "指定された形式に従った要約全文",
-  "purpose": "研究目的（1〜2文，抽出できる場合）",
-  "methodology": "研究手法（1〜2文，抽出できる場合）",
-  "findings": "主な発見・結果（2〜3文，抽出できる場合）",
-  "implications": "示唆・実践的意義（1文，抽出できる場合）"
+  "summary_text": "上記の指定形式に従った要約全文"
 }
 
 重要:
 - JSON形式のみで回答し，他のテキストは含めないでください．
-- summary_text には指定された形式に従った完全な要約を含めてください．
+- summary_text には指定された形式に完全に従った要約を含めてください．
 - 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
 PROMPT;
         } else {
@@ -243,15 +243,8 @@ PROMPT;
 
     private function callClaude(string $prompt, ?string $model = null): array
     {
-        // Use user's API key if available, otherwise fall back to admin/system config
-        $apiKey = null;
-        if ($this->user && $this->user->hasClaudeApiKey()) {
-            $apiKey = $this->user->claude_api_key;
-        } elseif (config('services.ai.admin_claude_api_key')) {
-            $apiKey = config('services.ai.admin_claude_api_key');
-        } else {
-            $apiKey = config('services.ai.claude_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveClaudeApiKey();
 
         if (!$apiKey) {
             throw new \Exception('Claude API key is not configured. Please set your API key in Settings.');
@@ -299,15 +292,8 @@ PROMPT;
 
     private function callOpenAI(string $prompt, ?string $model = null): array
     {
-        // Use user's API key if available, otherwise fall back to admin/system config
-        $apiKey = null;
-        if ($this->user && $this->user->hasOpenaiApiKey()) {
-            $apiKey = $this->user->openai_api_key;
-        } elseif (config('services.ai.admin_openai_api_key')) {
-            $apiKey = config('services.ai.admin_openai_api_key');
-        } else {
-            $apiKey = config('services.ai.openai_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveOpenaiApiKey();
 
         if (!$apiKey) {
             throw new \Exception('OpenAI API key is not configured. Please set your API key in Settings.');
@@ -389,12 +375,8 @@ PROMPT;
 
     private function callClaudeCustom(string $prompt, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasClaudeApiKey()) {
-            $apiKey = $this->user->claude_api_key;
-        } else {
-            $apiKey = config('services.ai.claude_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveClaudeApiKey();
 
         if (!$apiKey) {
             throw new \Exception('Claude API key is not configured.');
@@ -426,12 +408,8 @@ PROMPT;
 
     private function callOpenAICustom(string $prompt, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasOpenaiApiKey()) {
-            $apiKey = $this->user->openai_api_key;
-        } else {
-            $apiKey = config('services.ai.openai_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveOpenaiApiKey();
 
         if (!$apiKey) {
             throw new \Exception('OpenAI API key is not configured.');
@@ -624,12 +602,8 @@ CONTEXT;
 
     private function callClaudeChat(array $chatData, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasClaudeApiKey()) {
-            $apiKey = $this->user->claude_api_key;
-        } else {
-            $apiKey = config('services.ai.claude_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveClaudeApiKey();
 
         if (!$apiKey) {
             throw new \Exception('Claude API key is not configured.');
@@ -670,12 +644,8 @@ CONTEXT;
 
     private function callOpenAIChat(array $chatData, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasOpenaiApiKey()) {
-            $apiKey = $this->user->openai_api_key;
-        } else {
-            $apiKey = config('services.ai.openai_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveOpenaiApiKey();
 
         if (!$apiKey) {
             throw new \Exception('OpenAI API key is not configured.');
@@ -838,12 +808,8 @@ PROMPT;
 
     private function callClaudeTagSummary(string $prompt, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasClaudeApiKey()) {
-            $apiKey = $this->user->claude_api_key;
-        } else {
-            $apiKey = config('services.ai.claude_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveClaudeApiKey();
 
         if (!$apiKey) {
             throw new \Exception('Claude API key is not configured.');
@@ -888,12 +854,8 @@ PROMPT;
 
     private function callOpenAITagSummary(string $prompt, ?string $model = null): array
     {
-        $apiKey = null;
-        if ($this->user && $this->user->hasOpenaiApiKey()) {
-            $apiKey = $this->user->openai_api_key;
-        } else {
-            $apiKey = config('services.ai.openai_api_key');
-        }
+        // Use user's effective API key (includes admin env fallback for admin users)
+        $apiKey = $this->user?->getEffectiveOpenaiApiKey();
 
         if (!$apiKey) {
             throw new \Exception('OpenAI API key is not configured.');

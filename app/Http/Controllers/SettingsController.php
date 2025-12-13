@@ -32,16 +32,25 @@ class SettingsController extends Controller
         $this->aiService->setUser($user);
         $providers = $this->aiService->getAvailableProviders();
 
+        // 管理者の場合は .env のキーも考慮した実効キー情報を返す
+        $claudeKeySet = $user->hasEffectiveClaudeApiKey();
+        $openaiKeySet = $user->hasEffectiveOpenaiApiKey();
+        $claudeKeyMasked = $this->maskApiKey($user->getEffectiveClaudeApiKey());
+        $openaiKeyMasked = $this->maskApiKey($user->getEffectiveOpenaiApiKey());
+
         return response()->json([
             'success' => true,
-            'claude_api_key_set' => $user->hasClaudeApiKey(),
-            'claude_api_key_masked' => $this->maskApiKey($user->claude_api_key),
-            'openai_api_key_set' => $user->hasOpenaiApiKey(),
-            'openai_api_key_masked' => $this->maskApiKey($user->openai_api_key),
+            'claude_api_key_set' => $claudeKeySet,
+            'claude_api_key_masked' => $claudeKeyMasked,
+            'claude_api_key_from_env' => $user->isClaudeApiKeyFromEnv(),
+            'openai_api_key_set' => $openaiKeySet,
+            'openai_api_key_masked' => $openaiKeyMasked,
+            'openai_api_key_from_env' => $user->isOpenaiApiKeyFromEnv(),
             'preferred_ai_provider' => $user->preferred_ai_provider,
             'preferred_openai_model' => $user->preferred_openai_model,
             'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $providers,
+            'is_admin' => $user->is_admin,
         ]);
     }
 
@@ -135,12 +144,17 @@ class SettingsController extends Controller
             'success' => true,
             'message' => 'API settings updated successfully',
             'updated' => $updated,
-            'claude_api_key_set' => $user->hasClaudeApiKey(),
-            'openai_api_key_set' => $user->hasOpenaiApiKey(),
+            'claude_api_key_set' => $user->hasEffectiveClaudeApiKey(),
+            'claude_api_key_masked' => $this->maskApiKey($user->getEffectiveClaudeApiKey()),
+            'claude_api_key_from_env' => $user->isClaudeApiKeyFromEnv(),
+            'openai_api_key_set' => $user->hasEffectiveOpenaiApiKey(),
+            'openai_api_key_masked' => $this->maskApiKey($user->getEffectiveOpenaiApiKey()),
+            'openai_api_key_from_env' => $user->isOpenaiApiKeyFromEnv(),
             'preferred_ai_provider' => $user->preferred_ai_provider,
             'preferred_openai_model' => $user->preferred_openai_model,
             'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $providers,
+            'is_admin' => $user->is_admin,
         ]);
     }
 
@@ -176,12 +190,17 @@ class SettingsController extends Controller
         return response()->json([
             'success' => true,
             'message' => ucfirst($provider) . ' API key removed successfully',
-            'claude_api_key_set' => $user->hasClaudeApiKey(),
-            'openai_api_key_set' => $user->hasOpenaiApiKey(),
+            'claude_api_key_set' => $user->hasEffectiveClaudeApiKey(),
+            'claude_api_key_masked' => $this->maskApiKey($user->getEffectiveClaudeApiKey()),
+            'claude_api_key_from_env' => $user->isClaudeApiKeyFromEnv(),
+            'openai_api_key_set' => $user->hasEffectiveOpenaiApiKey(),
+            'openai_api_key_masked' => $this->maskApiKey($user->getEffectiveOpenaiApiKey()),
+            'openai_api_key_from_env' => $user->isOpenaiApiKeyFromEnv(),
             'preferred_ai_provider' => $user->preferred_ai_provider,
             'preferred_openai_model' => $user->preferred_openai_model,
             'preferred_claude_model' => $user->preferred_claude_model,
             'available_providers' => $providers,
+            'is_admin' => $user->is_admin,
         ]);
     }
 

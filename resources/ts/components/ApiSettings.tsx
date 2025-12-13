@@ -300,16 +300,25 @@ export default function ApiSettings(): JSX.Element {
               <p className="text-xs text-gray-500">OpenAI APIのキーを設定します</p>
             </div>
             {settings?.openai_api_key_set && (
-              <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">
-                設定済み
+              <span className={`px-2 py-1 text-xs font-medium rounded ${
+                settings?.openai_api_key_from_env
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-green-100 text-green-700'
+              }`}>
+                {settings?.openai_api_key_from_env ? '.env設定' : '設定済み'}
               </span>
             )}
           </div>
 
           {settings?.openai_api_key_masked && (
-            <div className="mb-3 p-2 bg-gray-50 rounded">
+            <div className={`mb-3 p-2 rounded ${
+              settings?.openai_api_key_from_env ? 'bg-blue-50' : 'bg-gray-50'
+            }`}>
               <p className="text-xs text-gray-600">
                 現在のキー: <code className="font-mono">{settings.openai_api_key_masked}</code>
+                {settings?.openai_api_key_from_env && (
+                  <span className="ml-2 text-blue-600">（サーバー設定から自動反映）</span>
+                )}
               </p>
             </div>
           )}
@@ -320,7 +329,9 @@ export default function ApiSettings(): JSX.Element {
                 type={showOpenaiKey ? 'text' : 'password'}
                 value={openaiApiKey}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setOpenaiApiKey(e.target.value)}
-                placeholder={settings?.openai_api_key_set ? '新しいキーを入力して更新' : 'sk-...'}
+                placeholder={settings?.openai_api_key_set
+                  ? (settings?.openai_api_key_from_env ? '個別キーを設定して上書き' : '新しいキーを入力して更新')
+                  : 'sk-...'}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 font-mono text-sm"
               />
               <button
@@ -340,7 +351,7 @@ export default function ApiSettings(): JSX.Element {
               {savingOpenai ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               保存
             </button>
-            {settings?.openai_api_key_set && (
+            {settings?.openai_api_key_set && !settings?.openai_api_key_from_env && (
               <button
                 type="button"
                 onClick={() => handleDeleteKey('openai')}
@@ -361,16 +372,25 @@ export default function ApiSettings(): JSX.Element {
               <p className="text-xs text-gray-500">Anthropic Claude APIのキーを設定します</p>
             </div>
             {settings?.claude_api_key_set && (
-              <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">
-                設定済み
+              <span className={`px-2 py-1 text-xs font-medium rounded ${
+                settings?.claude_api_key_from_env
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-green-100 text-green-700'
+              }`}>
+                {settings?.claude_api_key_from_env ? '.env設定' : '設定済み'}
               </span>
             )}
           </div>
 
           {settings?.claude_api_key_masked && (
-            <div className="mb-3 p-2 bg-gray-50 rounded">
+            <div className={`mb-3 p-2 rounded ${
+              settings?.claude_api_key_from_env ? 'bg-blue-50' : 'bg-gray-50'
+            }`}>
               <p className="text-xs text-gray-600">
                 現在のキー: <code className="font-mono">{settings.claude_api_key_masked}</code>
+                {settings?.claude_api_key_from_env && (
+                  <span className="ml-2 text-blue-600">（サーバー設定から自動反映）</span>
+                )}
               </p>
             </div>
           )}
@@ -381,7 +401,9 @@ export default function ApiSettings(): JSX.Element {
                 type={showClaudeKey ? 'text' : 'password'}
                 value={claudeApiKey}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setClaudeApiKey(e.target.value)}
-                placeholder={settings?.claude_api_key_set ? '新しいキーを入力して更新' : 'sk-ant-...'}
+                placeholder={settings?.claude_api_key_set
+                  ? (settings?.claude_api_key_from_env ? '個別キーを設定して上書き' : '新しいキーを入力して更新')
+                  : 'sk-ant-...'}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 font-mono text-sm"
               />
               <button
@@ -401,7 +423,7 @@ export default function ApiSettings(): JSX.Element {
               {savingClaude ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               保存
             </button>
-            {settings?.claude_api_key_set && (
+            {settings?.claude_api_key_set && !settings?.claude_api_key_from_env && (
               <button
                 type="button"
                 onClick={() => handleDeleteKey('claude')}

@@ -155,6 +155,98 @@ class User extends Model
     }
 
     /**
+     * Check if user has effective Claude API key (user key or admin env key)
+     *
+     * @return bool
+     */
+    public function hasEffectiveClaudeApiKey(): bool
+    {
+        if ($this->claude_api_key !== null) {
+            return true;
+        }
+        // 管理者のみ .env のキーを使用可能
+        if ($this->is_admin && config('services.ai.admin_claude_api_key')) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if user has effective OpenAI API key (user key or admin env key)
+     *
+     * @return bool
+     */
+    public function hasEffectiveOpenaiApiKey(): bool
+    {
+        if ($this->openai_api_key !== null) {
+            return true;
+        }
+        // 管理者のみ .env のキーを使用可能
+        if ($this->is_admin && config('services.ai.admin_openai_api_key')) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get effective Claude API key (user key or admin env key for admin users)
+     *
+     * @return string|null
+     */
+    public function getEffectiveClaudeApiKey(): ?string
+    {
+        if ($this->claude_api_key !== null) {
+            return $this->claude_api_key;
+        }
+        // 管理者のみ .env のキーを使用可能
+        if ($this->is_admin) {
+            return config('services.ai.admin_claude_api_key');
+        }
+        return null;
+    }
+
+    /**
+     * Get effective OpenAI API key (user key or admin env key for admin users)
+     *
+     * @return string|null
+     */
+    public function getEffectiveOpenaiApiKey(): ?string
+    {
+        if ($this->openai_api_key !== null) {
+            return $this->openai_api_key;
+        }
+        // 管理者のみ .env のキーを使用可能
+        if ($this->is_admin) {
+            return config('services.ai.admin_openai_api_key');
+        }
+        return null;
+    }
+
+    /**
+     * Check if Claude API key is from .env (for admin users)
+     *
+     * @return bool
+     */
+    public function isClaudeApiKeyFromEnv(): bool
+    {
+        return $this->is_admin
+            && $this->claude_api_key === null
+            && config('services.ai.admin_claude_api_key') !== null;
+    }
+
+    /**
+     * Check if OpenAI API key is from .env (for admin users)
+     *
+     * @return bool
+     */
+    public function isOpenaiApiKeyFromEnv(): bool
+    {
+        return $this->is_admin
+            && $this->openai_api_key === null
+            && config('services.ai.admin_openai_api_key') !== null;
+    }
+
+    /**
      * Get available AI providers for this user
      *
      * @return array

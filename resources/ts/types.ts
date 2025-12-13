@@ -83,6 +83,7 @@ export interface AIProvider {
   models: string[];
   default_model: string;
   user_key?: boolean;
+  from_env?: boolean;  // 管理者用: .envからのキー
 }
 
 export interface Pagination {
@@ -224,12 +225,15 @@ export interface RegenerateFeedResult {
 export interface ApiSettings {
   claude_api_key_set: boolean;
   claude_api_key_masked: string | null;
+  claude_api_key_from_env?: boolean;  // 管理者用: .envからのキー
   openai_api_key_set: boolean;
   openai_api_key_masked: string | null;
+  openai_api_key_from_env?: boolean;  // 管理者用: .envからのキー
   preferred_ai_provider: string;
   preferred_openai_model: string | null;
   preferred_claude_model: string | null;
   available_providers: AIProvider[];
+  is_admin?: boolean;  // 管理者フラグ
 }
 
 export interface ApiSettingsResponse {
