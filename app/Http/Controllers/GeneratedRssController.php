@@ -107,6 +107,8 @@ class GeneratedRssController extends Controller
         $user = $request->attributes->get('user');
 
         $url = $request->input('url');
+        $autoRedirect = $request->input('auto_redirect', true);
+
         if (!$url) {
             return response()->json([
                 'success' => false,
@@ -130,21 +132,41 @@ class GeneratedRssController extends Controller
             ], 400);
         }
 
-        $result = $this->rssGenerator->testPageAnalysis($url, $user);
-
-        if (!$result['success']) {
-            return response()->json([
-                'success' => false,
-                'error' => $result['error'],
-            ], 400);
+        // Use auto-redirect version if enabled
+        if ($autoRedirect) {
+            $result = $this->rssGenerator->testPageAnalysisWithRedirect($url, $user);
+        } else {
+            $result = $this->rssGenerator->testPageAnalysis($url, $user);
         }
 
-        return response()->json([
-            'success' => true,
-            'selectors' => $result['selectors'] ?? [],
-            'sample_papers' => $result['sample_papers'] ?? [],
-            'provider' => $result['provider'],
+        $response = [
+            'success' => $result['success'],
+            'is_article_list_page' => $result['is_article_list_page'] ?? null,
+            'page_type' => $result['page_type'] ?? null,
+            'page_type_reason' => $result['page_type_reason'] ?? null,
+            'provider' => $result['provider'] ?? null,
             'page_size' => $result['page_size'] ?? null,
-        ]);
+        ];
+
+        // Add redirect info if available
+        if (!empty($result['redirect_history'])) {
+            $response['redirect_history'] = $result['redirect_history'];
+        }
+        if (!empty($result['final_url'])) {
+            $response['final_url'] = $result['final_url'];
+        }
+        if (!empty($result['article_list_url'])) {
+            $response['article_list_url'] = $result['article_list_url'];
+        }
+
+        if (!$result['success']) {
+            $response['error'] = $result['error'] ?? 'Analysis failed';
+            return response()->json($response, 400);
+        }
+
+        $response['selectors'] = $result['selectors'] ?? [];
+        $response['sample_papers'] = $result['sample_papers'] ?? [];
+
+        return response()->json($response);
     }
 }

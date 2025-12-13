@@ -32,10 +32,24 @@ class TrendController extends Controller
             return response()->json(['error' => '無効な期間です'], 400);
         }
 
-        $papers = Paper::with('journal:id,name,color')
+        // Get tag IDs from query string (optional)
+        $tagIds = $request->query('tagIds', []);
+        if (is_string($tagIds)) {
+            $tagIds = $tagIds ? array_map('intval', explode(',', $tagIds)) : [];
+        }
+
+        $papersQuery = Paper::with('journal:id,name,color')
             ->forUser($user->id)
-            ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']])
-            ->orderBy('published_date', 'desc')
+            ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']]);
+
+        // Filter by tags if specified
+        if (!empty($tagIds)) {
+            $papersQuery->whereHas('tags', function ($query) use ($tagIds) {
+                $query->whereIn('tags.id', $tagIds);
+            });
+        }
+
+        $papers = $papersQuery->orderBy('published_date', 'desc')
             ->get()
             ->map(function ($paper) {
                 return [
@@ -58,6 +72,7 @@ class TrendController extends Controller
             ],
             'papers' => $papers,
             'count' => $papers->count(),
+            'tagIds' => $tagIds,
         ]);
     }
 

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Models\Paper;
 use Illuminate\Support\Facades\DB;
 
@@ -116,7 +118,39 @@ class PaperController extends Controller
             'full_text' => $paper->full_text,
             'full_text_source' => $paper->full_text_source,
             'pdf_url' => $paper->pdf_url,
+            'has_local_pdf' => $paper->hasLocalPdf(),
             'full_text_fetched_at' => $paper->full_text_fetched_at?->toISOString(),
+        ]);
+    }
+
+    /**
+     * ローカルに保存されたPDFをダウンロード
+     */
+    public function downloadPdf(Request $request, int $id): StreamedResponse|JsonResponse
+    {
+        $user = $request->attributes->get('user');
+
+        $paper = Paper::forUser($user->id)->find($id);
+
+        if (!$paper) {
+            return response()->json(['success' => false, 'error' => '論文が見つかりません'], 404);
+        }
+
+        if (!$paper->hasLocalPdf()) {
+            return response()->json(['success' => false, 'error' => 'PDFが保存されていません'], 404);
+        }
+
+        $disk = Storage::disk('papers');
+        $path = $paper->pdf_path;
+
+        // ファイル名を生成（DOIまたはタイトルから）
+        $fileName = $paper->doi
+            ? preg_replace('/[^a-zA-Z0-9._-]/', '_', $paper->doi) . '.pdf'
+            : preg_replace('/[^a-zA-Z0-9._\-\s]/', '', substr($paper->title, 0, 50)) . '.pdf';
+
+        return $disk->download($path, $fileName, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
         ]);
     }
 
@@ -147,6 +181,7 @@ class PaperController extends Controller
             'has_full_text' => $paper->hasFullText(),
             'full_text_source' => $paper->full_text_source,
             'pdf_url' => $paper->pdf_url,
+            'has_local_pdf' => $paper->hasLocalPdf(),
             // Always include summaries for frontend to show existing summaries
             'summaries' => $paper->summaries->map(function ($s) {
                 return [

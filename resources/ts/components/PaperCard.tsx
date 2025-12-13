@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText, History, RefreshCw } from 'lucide-react';
+import { ExternalLink, Sparkles, ChevronUp, ChevronDown, Loader2, Tag, Plus, X, MessageCircle, Send, Trash2, Maximize2, Minimize2, FileText, History, RefreshCw, Download } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
 import type { Paper, Summary, Tag as TagType, ChatMessage } from '../types';
@@ -53,7 +53,11 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
   const [fullText, setFullText] = useState<string | null>(null);
   const [fullTextLoading, setFullTextLoading] = useState(false);
   const [fullTextSource, setFullTextSource] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(paper.pdf_url || null);
+  // ローカルPDFがある場合は内部API URLを使用，なければ外部PDF URLを使用
+  const [pdfUrl, setPdfUrl] = useState<string | null>(
+    paper.has_local_pdf ? api.papers.getPdfUrl(paper.id) : (paper.pdf_url || null)
+  );
+  const [hasLocalPdf, setHasLocalPdf] = useState<boolean>(paper.has_local_pdf || false);
 
   // 外側クリックでドロップダウンを閉じる
   useEffect(() => {
@@ -386,7 +390,11 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
       if (data.success) {
         setFullText(data.full_text);
         setFullTextSource(data.full_text_source);
-        if (data.pdf_url) {
+        // ローカルPDFがある場合は内部API URLを使用
+        if (data.has_local_pdf) {
+          setPdfUrl(api.papers.getPdfUrl(paper.id));
+          setHasLocalPdf(true);
+        } else if (data.pdf_url) {
           setPdfUrl(data.pdf_url);
         }
         setFullTextOpen(true);
@@ -677,6 +685,20 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                   <span className="hidden sm:inline">本文を表示</span>
                   <span className="sm:hidden">本文</span>
                 </button>
+              )}
+
+              {/* PDFダウンロードボタン（ローカルPDFがある場合） */}
+              {(paper.has_local_pdf || hasLocalPdf) && (
+                <a
+                  href={api.papers.getPdfUrl(paper.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="PDFをダウンロード"
+                >
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">PDF</span>
+                </a>
               )}
 
               <a
@@ -1073,7 +1095,7 @@ export default function PaperCard({ paper, onTagsChange, hasAnyApiKey = true }: 
                     論文本文
                     {(pdfUrl || fullTextSource) && (
                       <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">
-                        {pdfUrl ? 'PDF' : fullTextSource === 'html_scrape' ? 'HTML' : fullTextSource}
+                        {pdfUrl ? (hasLocalPdf ? 'PDF (保存済)' : 'PDF') : fullTextSource === 'html_scrape' ? 'HTML' : fullTextSource}
                       </span>
                     )}
                   </span>

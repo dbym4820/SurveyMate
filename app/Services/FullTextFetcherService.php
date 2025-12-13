@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Paper;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Smalot\PdfParser\Parser as PdfParser;
+use Smalot\PdfParser\Config as PdfConfig;
 
 class FullTextFetcherService
 {
@@ -14,19 +16,23 @@ class FullTextFetcherService
     private ?string $unpaywallEmail;
     private int $timeout;
     private int $maxTextLength;
+    private int $maxPdfSize;
+    private string $pdfMemoryLimit;
 
     public function __construct()
     {
         $this->unpaywallEmail = config('surveymate.full_text.unpaywall_email');
         $this->timeout = config('surveymate.full_text.timeout', 30);
         $this->maxTextLength = config('surveymate.full_text.max_text_length', 100000);
+        $this->maxPdfSize = config('surveymate.full_text.max_pdf_size', 1024 * 1024 * 1024); // 1GB default
+        $this->pdfMemoryLimit = config('surveymate.full_text.pdf_memory_limit', '2G');
     }
 
     /**
      * 論文の本文を取得
      *
      * @param Paper $paper
-     * @return array ['success' => bool, 'source' => string|null, 'text' => string|null, 'pdf_url' => string|null, 'error' => string|null]
+     * @return array ['success' => bool, 'source' => string|null, 'text' => string|null, 'pdf_url' => string|null, 'pdf_path' => string|null, 'error' => string|null]
      */
     public function fetchFullText(Paper $paper): array
     {
@@ -40,6 +46,7 @@ class FullTextFetcherService
                         'source' => 'html_scrape',
                         'text' => $this->truncateText($result['text']),
                         'pdf_url' => null,
+                        'pdf_path' => null,
                         'error' => null,
                     ];
                 }
@@ -49,6 +56,7 @@ class FullTextFetcherService
                 'source' => null,
                 'text' => null,
                 'pdf_url' => null,
+                'pdf_path' => null,
                 'error' => 'No DOI or accessible URL available',
             ];
         }
@@ -57,14 +65,15 @@ class FullTextFetcherService
         $pdfUrl = $this->getPdfUrlFromUnpaywall($paper->doi);
 
         if ($pdfUrl) {
-            // 2. PDFをダウンロードしてテキスト抽出
-            $result = $this->extractTextFromPdf($pdfUrl);
+            // 2. PDFをダウンロードしてテキスト抽出（PDFも保存）
+            $result = $this->extractTextFromPdf($pdfUrl, $paper);
             if ($result['success']) {
                 return [
                     'success' => true,
                     'source' => 'unpaywall_pdf',
                     'text' => $this->truncateText($result['text']),
                     'pdf_url' => $pdfUrl,
+                    'pdf_path' => $result['pdf_path'] ?? null,
                     'error' => null,
                 ];
             }
@@ -80,6 +89,7 @@ class FullTextFetcherService
                     'source' => 'html_scrape',
                     'text' => $this->truncateText($result['text']),
                     'pdf_url' => null,
+                    'pdf_path' => null,
                     'error' => null,
                 ];
             }
@@ -91,6 +101,7 @@ class FullTextFetcherService
             'source' => null,
             'text' => null,
             'pdf_url' => null,
+            'pdf_path' => null,
             'error' => 'All extraction methods failed',
         ];
     }
@@ -142,49 +153,129 @@ class FullTextFetcherService
     }
 
     /**
-     * PDFからテキストを抽出
+     * PDFからテキストを抽出し，PDFファイルも保存
      */
-    private function extractTextFromPdf(string $pdfUrl): array
+    private function extractTextFromPdf(string $pdfUrl, ?Paper $paper = null): array
     {
+        $tempFile = null;
+
         try {
-            // PDFをダウンロード
-            $response = Http::timeout($this->timeout * 2)
-                ->withHeaders([
-                    'User-Agent' => 'Mozilla/5.0 (compatible; SurveyMate/1.0; Academic Research)',
-                ])
-                ->get($pdfUrl);
-
-            if (!$response->successful()) {
+            // 一時ファイルを作成（メモリ節約のため）
+            $tempFile = tempnam(sys_get_temp_dir(), 'surveymate_pdf_');
+            if ($tempFile === false) {
                 return [
                     'success' => false,
                     'text' => null,
-                    'error' => 'Failed to download PDF: ' . $response->status(),
+                    'pdf_path' => null,
+                    'error' => 'Failed to create temp file',
                 ];
             }
 
-            $pdfContent = $response->body();
+            // PDFをストリーミングダウンロード（大きなファイル対応）
+            $downloadResult = $this->downloadPdfToFile($pdfUrl, $tempFile);
+            if (!$downloadResult['success']) {
+                @unlink($tempFile);
+                return array_merge($downloadResult, ['pdf_path' => null]);
+            }
 
-            // Content-Typeチェック
-            $contentType = $response->header('Content-Type');
-            if ($contentType && !str_contains($contentType, 'pdf') && !str_contains($contentType, 'octet-stream')) {
+            $pdfSize = filesize($tempFile);
+
+            // PDFサイズチェック
+            if ($pdfSize > $this->maxPdfSize) {
+                @unlink($tempFile);
+                Log::info("PDF too large, skipping: {$pdfUrl} ({$pdfSize} bytes)");
                 return [
                     'success' => false,
                     'text' => null,
-                    'error' => 'Not a PDF file: ' . $contentType,
+                    'pdf_path' => null,
+                    'error' => 'PDF too large: ' . round($pdfSize / 1024 / 1024, 2) . 'MB (max: ' . round($this->maxPdfSize / 1024 / 1024) . 'MB)',
                 ];
             }
 
-            // PDFパーサーでテキスト抽出
-            $parser = new PdfParser();
-            $pdf = $parser->parseContent($pdfContent);
-            $text = $pdf->getText();
+            // PDFをストレージに保存
+            $pdfPath = null;
+            if ($paper !== null) {
+                $pdfPath = $this->savePdfToStorage($tempFile, $paper);
+            }
 
-            // テキストが短すぎる場合は失敗とみなす
-            if (strlen($text) < 500) {
+            // メモリ制限を一時的に増加（PDFパース用）
+            $originalMemoryLimit = ini_get('memory_limit');
+            ini_set('memory_limit', $this->pdfMemoryLimit);
+
+            $text = null;
+            $parseError = null;
+
+            try {
+                // PDFパーサー設定（メモリ最適化）
+                $config = new PdfConfig();
+                $config->setRetainImageContent(false); // 画像データを保持しない
+                $config->setDecodeMemoryLimit(0); // デコードメモリ制限を無効化（独自で管理）
+                $config->setFontSpaceLimit(-60); // フォントスペース検出の閾値
+
+                // PDFパーサーでテキスト抽出（ファイルから直接読み込み）
+                $parser = new PdfParser([], $config);
+                $pdf = $parser->parseFile($tempFile);
+                $text = $pdf->getText();
+
+                // メモリを解放
+                unset($pdf);
+                unset($parser);
+
+            } catch (\Error $e) {
+                $parseError = $e;
+                // メモリエラーをキャッチ
+                if (str_contains($e->getMessage(), 'memory') || str_contains($e->getMessage(), 'Allowed memory size')) {
+                    Log::warning("PDF parsing memory error: {$pdfUrl} - " . $e->getMessage());
+                    $text = null;
+                    $parseError = new \Exception('PDF parsing requires too much memory');
+                }
+            } catch (\Exception $e) {
+                $parseError = $e;
+            }
+
+            // メモリ制限を元に戻す
+            ini_set('memory_limit', $originalMemoryLimit);
+
+            // 一時ファイルを削除
+            @unlink($tempFile);
+            $tempFile = null;
+
+            // パースエラーがあった場合（PDFは保存済みなので，テキスト抽出失敗でもPDFは返す）
+            if ($parseError !== null) {
+                // PDFが保存できていれば部分的成功
+                if ($pdfPath !== null) {
+                    Log::info("PDF saved but text extraction failed: {$pdfUrl}");
+                    return [
+                        'success' => true,
+                        'text' => null,
+                        'pdf_path' => $pdfPath,
+                        'error' => null,
+                    ];
+                }
                 return [
                     'success' => false,
                     'text' => null,
-                    'error' => 'Extracted text too short (possibly scanned PDF)',
+                    'pdf_path' => null,
+                    'error' => 'PDF parsing error: ' . $parseError->getMessage(),
+                ];
+            }
+
+            // テキストが短すぎる場合でもPDFは保存
+            if ($text === null || strlen($text) < 500) {
+                if ($pdfPath !== null) {
+                    Log::info("PDF saved but extracted text too short: {$pdfUrl}");
+                    return [
+                        'success' => true,
+                        'text' => null,
+                        'pdf_path' => $pdfPath,
+                        'error' => null,
+                    ];
+                }
+                return [
+                    'success' => false,
+                    'text' => null,
+                    'pdf_path' => null,
+                    'error' => 'Extracted text too short (possibly scanned PDF or protected)',
                 ];
             }
 
@@ -194,14 +285,132 @@ class FullTextFetcherService
             return [
                 'success' => true,
                 'text' => $text,
+                'pdf_path' => $pdfPath,
                 'error' => null,
             ];
+
+        } catch (\Exception $e) {
+            // 一時ファイルのクリーンアップ
+            if ($tempFile !== null && file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+
+            return [
+                'success' => false,
+                'text' => null,
+                'pdf_path' => null,
+                'error' => 'PDF processing error: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * PDFファイルをストレージに保存
+     */
+    private function savePdfToStorage(string $tempFile, Paper $paper): ?string
+    {
+        try {
+            // ユーザーIDとjournal_idでディレクトリを分ける
+            $journal = $paper->journal;
+            $userId = $journal ? $journal->user_id : 'unknown';
+
+            // DOIをファイル名に使用（なければpaper ID）
+            $fileName = $paper->doi
+                ? preg_replace('/[^a-zA-Z0-9._-]/', '_', $paper->doi) . '.pdf'
+                : "paper_{$paper->id}.pdf";
+
+            // パス: {user_id}/{journal_id}/{filename}
+            $journalId = $paper->journal_id ?? 'unknown';
+            $path = "{$userId}/{$journalId}/{$fileName}";
+
+            // ストレージに保存
+            $content = file_get_contents($tempFile);
+            if ($content === false) {
+                Log::warning("Failed to read temp file for storage: {$tempFile}");
+                return null;
+            }
+
+            Storage::disk('papers')->put($path, $content);
+            Log::info("PDF saved to storage: {$path}");
+
+            return $path;
+
+        } catch (\Exception $e) {
+            Log::error("Failed to save PDF to storage: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * PDFをファイルにストリーミングダウンロード
+     */
+    private function downloadPdfToFile(string $pdfUrl, string $filePath): array
+    {
+        try {
+            // cURLでストリーミングダウンロード（メモリ効率が良い）
+            $ch = curl_init($pdfUrl);
+            $fp = fopen($filePath, 'wb');
+
+            if ($fp === false) {
+                return [
+                    'success' => false,
+                    'text' => null,
+                    'error' => 'Failed to open temp file for writing',
+                ];
+            }
+
+            curl_setopt_array($ch, [
+                CURLOPT_FILE => $fp,
+                CURLOPT_TIMEOUT => $this->timeout * 3,
+                CURLOPT_CONNECTTIMEOUT => $this->timeout,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; SurveyMate/1.0; Academic Research)',
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/pdf, */*',
+                ],
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+
+            $success = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $error = curl_error($ch);
+
+            curl_close($ch);
+            fclose($fp);
+
+            if (!$success || $httpCode >= 400) {
+                return [
+                    'success' => false,
+                    'text' => null,
+                    'error' => 'Failed to download PDF: HTTP ' . $httpCode . ($error ? " - {$error}" : ''),
+                ];
+            }
+
+            // Content-Typeチェック（PDFまたはバイナリ）
+            if ($contentType && !str_contains($contentType, 'pdf') && !str_contains($contentType, 'octet-stream') && !str_contains($contentType, 'binary')) {
+                // ファイルのマジックバイトでPDFかどうか確認
+                $handle = fopen($filePath, 'rb');
+                $header = fread($handle, 5);
+                fclose($handle);
+
+                if ($header !== '%PDF-') {
+                    return [
+                        'success' => false,
+                        'text' => null,
+                        'error' => 'Not a PDF file: ' . $contentType,
+                    ];
+                }
+            }
+
+            return ['success' => true, 'text' => null, 'error' => null];
 
         } catch (\Exception $e) {
             return [
                 'success' => false,
                 'text' => null,
-                'error' => 'PDF parsing error: ' . $e->getMessage(),
+                'error' => 'Download error: ' . $e->getMessage(),
             ];
         }
     }

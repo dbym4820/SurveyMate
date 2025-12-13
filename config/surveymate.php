@@ -68,6 +68,8 @@ return [
         'enabled' => env('FULLTEXT_FETCH_ENABLED', true),
         'unpaywall_email' => env('UNPAYWALL_EMAIL', ''),
         'max_text_length' => env('FULLTEXT_MAX_LENGTH', 100000),
+        'max_pdf_size' => env('FULLTEXT_MAX_PDF_SIZE', 1024 * 1024 * 1024), // 1GB default
+        'pdf_memory_limit' => env('FULLTEXT_PDF_MEMORY_LIMIT', '2G'), // Memory limit for PDF parsing
         'timeout' => env('FULLTEXT_TIMEOUT', 30),
         'retry_failed' => env('FULLTEXT_RETRY_FAILED', false),
     ],

@@ -1,9 +1,19 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { Plus, Edit, X, Check, Loader2, AlertCircle, TestTube, Sparkles, Rss, Copy } from 'lucide-react';
+import { Plus, Edit, X, Check, Loader2, AlertCircle, TestTube, Sparkles, Rss, Copy, ArrowRight, FileText, Home, Search, File, HelpCircle } from 'lucide-react';
 import api, { getBasePath } from '../api';
 import { AVAILABLE_COLORS } from '../constants';
 import { useToast } from './Toast';
 import type { Journal, JournalFormData, RssTestResult, PageTestResult } from '../types';
+
+// ページ種類のラベル
+const PAGE_TYPE_LABELS: Record<string, { label: string; icon: JSX.Element }> = {
+  article_list: { label: '論文一覧', icon: <FileText className="w-4 h-4" /> },
+  journal_home: { label: '雑誌トップ', icon: <Home className="w-4 h-4" /> },
+  article_detail: { label: '個別論文', icon: <File className="w-4 h-4" /> },
+  search_results: { label: '検索結果', icon: <Search className="w-4 h-4" /> },
+  other: { label: 'その他', icon: <HelpCircle className="w-4 h-4" /> },
+  unknown: { label: '不明', icon: <HelpCircle className="w-4 h-4" /> },
+};
 
 interface JournalModalProps {
   journal: Journal | null;
@@ -346,6 +356,34 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                 ページ構造の解析成功（{pageTestResult.provider}）
               </div>
               <div className="text-sm text-green-800 space-y-1">
+                {/* ページ種類判定 */}
+                {pageTestResult.page_type && (
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-green-200">
+                    {PAGE_TYPE_LABELS[pageTestResult.page_type]?.icon || PAGE_TYPE_LABELS.unknown.icon}
+                    <span className="font-medium">
+                      ページ種類: {PAGE_TYPE_LABELS[pageTestResult.page_type]?.label || pageTestResult.page_type}
+                    </span>
+                    {pageTestResult.page_type_reason && (
+                      <span className="text-xs text-green-600">（{pageTestResult.page_type_reason}）</span>
+                    )}
+                  </div>
+                )}
+                {/* リダイレクト履歴 */}
+                {pageTestResult.redirect_history && pageTestResult.redirect_history.length > 0 && (
+                  <div className="mb-2 pb-2 border-b border-green-200">
+                    <p className="text-xs font-medium text-green-700 mb-1">自動リダイレクト:</p>
+                    <div className="space-y-1">
+                      {pageTestResult.redirect_history.map((redirect, i) => (
+                        <div key={i} className="flex items-center gap-1 text-xs text-green-600">
+                          <span className="truncate max-w-[150px]" title={redirect.from}>{new URL(redirect.from).pathname}</span>
+                          <ArrowRight className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate max-w-[150px]" title={redirect.to}>{new URL(redirect.to).pathname}</span>
+                          <span className="text-green-500">({PAGE_TYPE_LABELS[redirect.page_type]?.label || redirect.page_type})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p>検出論文数: {pageTestResult.sample_papers?.length || 0}件</p>
                 {pageTestResult.page_size && (
                   <p className="text-xs text-green-600">
@@ -357,6 +395,9 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                     <p className="font-medium text-green-700">抽出設定:</p>
                     <p>タイトル: {pageTestResult.selectors.title || '未検出'}</p>
                     <p>URL: {pageTestResult.selectors.url || '未検出'}</p>
+                    {pageTestResult.selectors.doi && (
+                      <p>DOI: {pageTestResult.selectors.doi}</p>
+                    )}
                   </div>
                 )}
                 {pageTestResult.sample_papers && pageTestResult.sample_papers.length > 0 && (
@@ -366,6 +407,7 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                       {pageTestResult.sample_papers.slice(0, 5).map((paper, i) => (
                         <li key={i} className="truncate">
                           {paper.title}
+                          {paper.doi && <span className="text-green-500 ml-1">[DOI: {paper.doi}]</span>}
                         </li>
                       ))}
                     </ul>
@@ -374,6 +416,43 @@ export default function JournalModal({ journal, onSave, onClose }: JournalModalP
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ページ解析失敗時（リダイレクト提案あり） */}
+          {pageTestResult && !pageTestResult.success && pageTestResult.article_list_url && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 text-amber-700 font-medium mb-2">
+                <AlertCircle className="w-4 h-4" />
+                論文一覧ページが見つかりました
+              </div>
+              <div className="text-sm text-amber-800 space-y-2">
+                {pageTestResult.page_type && (
+                  <div className="flex items-center gap-2">
+                    {PAGE_TYPE_LABELS[pageTestResult.page_type]?.icon || PAGE_TYPE_LABELS.unknown.icon}
+                    <span>現在のページ: {PAGE_TYPE_LABELS[pageTestResult.page_type]?.label || pageTestResult.page_type}</span>
+                  </div>
+                )}
+                <p className="text-xs">{pageTestResult.error}</p>
+                <div className="mt-2">
+                  <p className="text-xs font-medium mb-1">推奨URL:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-amber-100 px-2 py-1 rounded break-all flex-1">
+                      {pageTestResult.article_list_url}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleChange('rssUrl', pageTestResult.article_list_url!);
+                        setPageTestResult(null);
+                      }}
+                      className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors flex-shrink-0"
+                    >
+                      このURLを使用
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

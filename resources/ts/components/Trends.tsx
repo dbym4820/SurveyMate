@@ -4,7 +4,7 @@ import {
   ChevronDown, ChevronUp, Clock, Target, Lightbulb,
   Tag, History, Check, X
 } from 'lucide-react';
-import api, { getBasePath } from '../api';
+import api from '../api';
 import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType } from '../types';
 
 interface TrendStats {
@@ -32,7 +32,7 @@ interface TrendSummary {
 interface PeriodPaper {
   id: number;
   title: string;
-  authors: string[];
+  authors: string | string[];
   abstract: string | null;
   published_date: string | null;
   journal_name: string | null;
@@ -142,10 +142,7 @@ export default function Trends(): JSX.Element {
   const fetchStats = async () => {
     try {
       setIsLoadingStats(true);
-      const response = await fetch(`${getBasePath()}/api/trends/stats`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
+      const data = await api.trends.stats();
       if (data.success) {
         setStats(data.stats);
       }
@@ -159,10 +156,7 @@ export default function Trends(): JSX.Element {
   const fetchPapers = async (period: Period) => {
     try {
       setIsLoadingPapers(true);
-      const response = await fetch(`${getBasePath()}/api/trends/${period}/papers`, {
-        credentials: 'include',
-      });
-      const data = await response.json();
+      const data = await api.trends.papers(period, selectedTagIds.length > 0 ? selectedTagIds : undefined);
       if (data.success) {
         setPapers(data.papers);
       }

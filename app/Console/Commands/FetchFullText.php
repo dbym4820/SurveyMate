@@ -65,12 +65,18 @@ class FetchFullText extends Command
             $result = $this->fetcher->fetchFullText($paper);
 
             if ($result['success']) {
-                $paper->update([
+                $updateData = [
                     'full_text' => $result['text'],
                     'full_text_source' => $result['source'],
-                    'pdf_url' => $result['pdf_url'],
                     'full_text_fetched_at' => now(),
-                ]);
+                ];
+                if (!empty($result['pdf_url'])) {
+                    $updateData['pdf_url'] = $result['pdf_url'];
+                }
+                if (!empty($result['pdf_path'])) {
+                    $updateData['pdf_path'] = $result['pdf_path'];
+                }
+                $paper->update($updateData);
                 $success++;
             } else {
                 // 失敗も記録（再試行判定用）

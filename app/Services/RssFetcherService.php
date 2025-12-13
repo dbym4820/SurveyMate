@@ -288,11 +288,21 @@ class RssFetcherService
         $result = $this->fullTextFetcher->fetchFullText($paper);
 
         if ($result['success']) {
-            $paper->update([
+            $updateData = [
                 'full_text' => $result['text'],
                 'full_text_source' => $result['source'],
                 'full_text_fetched_at' => now(),
-            ]);
+            ];
+
+            // PDF URLとパスを保存
+            if (!empty($result['pdf_url'])) {
+                $updateData['pdf_url'] = $result['pdf_url'];
+            }
+            if (!empty($result['pdf_path'])) {
+                $updateData['pdf_path'] = $result['pdf_path'];
+            }
+
+            $paper->update($updateData);
             return true;
         }
 

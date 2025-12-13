@@ -59,6 +59,7 @@ export interface Paper {
   has_full_text?: boolean;
   full_text_source?: string | null;
   pdf_url?: string | null;
+  has_local_pdf?: boolean;
   summaries?: Summary[];
   tags?: Tag[];
 }
@@ -194,6 +195,19 @@ export interface JournalFormData {
 // AI RSS生成関連
 export interface PageTestResult {
   success: boolean;
+  // ページ種類判定
+  is_article_list_page?: boolean;
+  page_type?: 'article_list' | 'journal_home' | 'article_detail' | 'search_results' | 'other' | null;
+  page_type_reason?: string;
+  // リダイレクト情報
+  article_list_url?: string;
+  final_url?: string;
+  redirect_history?: Array<{
+    from: string;
+    to: string;
+    page_type: string;
+  }>;
+  // セレクタ（論文一覧ページの場合のみ）
   selectors?: {
     paper_container?: string;
     title?: string;
@@ -205,10 +219,14 @@ export interface PageTestResult {
     abstract?: string | null;
     date?: string | null;
     date_format?: string;
+    doi?: string | null;
+    doi_attr?: string;
+    doi_pattern?: string;
   };
   sample_papers?: Array<{
     title: string;
     url: string;
+    doi?: string;
   }>;
   provider?: string;
   page_size?: {

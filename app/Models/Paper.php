@@ -18,6 +18,7 @@ class Paper extends Model
         'full_text',
         'full_text_source',
         'pdf_url',
+        'pdf_path',
         'full_text_fetched_at',
         'url',
         'doi',
@@ -38,6 +39,25 @@ class Paper extends Model
     public function hasFullText(): bool
     {
         return !empty($this->full_text);
+    }
+
+    /**
+     * ローカルにPDFが保存されているかどうか
+     */
+    public function hasLocalPdf(): bool
+    {
+        return !empty($this->pdf_path) && \Storage::disk('papers')->exists($this->pdf_path);
+    }
+
+    /**
+     * PDFのフルパスを取得
+     */
+    public function getPdfFullPath(): ?string
+    {
+        if (!$this->hasLocalPdf()) {
+            return null;
+        }
+        return \Storage::disk('papers')->path($this->pdf_path);
     }
 
     /**

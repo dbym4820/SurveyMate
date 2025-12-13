@@ -68,6 +68,7 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::get('/papers/stats', [PaperController::class, 'stats']);
     Route::get('/papers/{id}', [PaperController::class, 'show']);
     Route::get('/papers/{id}/full-text', [PaperController::class, 'getFullText']);
+    Route::get('/papers/{id}/pdf', [PaperController::class, 'downloadPdf']);
 
     // Tags
     Route::prefix('tags')->group(function () {

@@ -162,8 +162,10 @@ export const api = {
       full_text: string;
       full_text_source: string | null;
       pdf_url: string | null;
+      has_local_pdf: boolean;
       full_text_fetched_at: string | null;
     }> => request(`/papers/${paperId}/full-text`),
+    getPdfUrl: (paperId: number): string => `${getApiBase()}/papers/${paperId}/pdf`,
   },
 
   // タグ
@@ -283,8 +285,10 @@ export const api = {
   trends: {
     stats: (): Promise<TrendStatsResponse> =>
       request('/trends/stats'),
-    papers: (period: string): Promise<TrendPapersResponse> =>
-      request(`/trends/${period}/papers`),
+    papers: (period: string, tagIds?: number[]): Promise<TrendPapersResponse> => {
+      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+      return request(`/trends/${period}/papers${query}`);
+    },
     summary: (period: string, tagIds?: number[]): Promise<TrendSummaryResponse> => {
       const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
       return request(`/trends/${period}/summary${query}`);

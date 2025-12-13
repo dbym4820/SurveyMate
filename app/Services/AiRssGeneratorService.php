@@ -175,16 +175,43 @@ class AiRssGeneratorService
                 $result = $this->callOpenAIForAnalysis($prompt);
             }
 
-            // Validate selectors
-            if (empty($result['selectors'])) {
+            // Check if this is an article list page
+            $isArticleListPage = $result['is_article_list_page'] ?? false;
+            $pageType = $result['page_type'] ?? 'unknown';
+            $pageTypeReason = $result['page_type_reason'] ?? '';
+            $articleListUrl = $result['article_list_url'] ?? null;
+
+            // If not an article list page, return with redirect suggestion
+            if (!$isArticleListPage) {
                 return [
                     'success' => false,
-                    'error' => 'AI could not identify page structure',
+                    'is_article_list_page' => false,
+                    'page_type' => $pageType,
+                    'page_type_reason' => $pageTypeReason,
+                    'article_list_url' => $articleListUrl ? $this->resolveUrl($articleListUrl, $url) : null,
+                    'error' => $articleListUrl
+                        ? 'このページは論文一覧ページではありません．最新論文一覧ページへのリンクを検出しました．'
+                        : 'このページは論文一覧ページではありません．最新論文一覧ページのURLを直接指定してください．',
+                    'provider' => $provider,
+                ];
+            }
+
+            // Validate selectors for article list pages
+            if (empty($result['selectors']) || empty($result['selectors']['paper_container'])) {
+                return [
+                    'success' => false,
+                    'is_article_list_page' => true,
+                    'page_type' => $pageType,
+                    'error' => 'ページ構造を特定できませんでした．',
+                    'provider' => $provider,
                 ];
             }
 
             return [
                 'success' => true,
+                'is_article_list_page' => true,
+                'page_type' => $pageType,
+                'page_type_reason' => $pageTypeReason,
                 'selectors' => $result['selectors'] ?? [],
                 'sample_papers' => $result['sample_papers'] ?? [],
                 'provider' => $provider,
@@ -208,7 +235,7 @@ class AiRssGeneratorService
     private function buildStructureAnalysisPrompt(string $html, string $url): string
     {
         return <<<PROMPT
-以下のHTMLは学術論文の一覧ページです．このページの構造を解析し，論文情報を抽出するためのCSSセレクタを特定してください．
+以下のHTMLを解析し，学術論文の最新一覧ページかどうかを判断してください．
 
 【URL】
 {$url}
@@ -216,8 +243,12 @@ class AiRssGeneratorService
 【HTML】
 {$html}
 
-以下のJSON形式で，ページ構造情報を返してください：
+以下のJSON形式で回答してください：
 {
+  "is_article_list_page": true または false,
+  "page_type": "ページの種類（article_list: 論文一覧, journal_home: 雑誌トップページ, article_detail: 個別論文ページ, search_results: 検索結果, other: その他）",
+  "page_type_reason": "ページ種類を判断した理由（50文字以内）",
+  "article_list_url": "最新論文一覧ページへのリンクURL（is_article_list_pageがfalseの場合に検出できれば記載，相対URLでも可）",
   "selectors": {
     "paper_container": "各論文を含むコンテナ要素のCSSセレクタ（例：.article-list > .article-item）",
     "title": "コンテナ内でのタイトル要素のCSSセレクタ（例：.article-title a）",
@@ -228,22 +259,29 @@ class AiRssGeneratorService
     "authors_attr": "著者テキストの取得方法（textContent または属性名）",
     "abstract": "概要要素のCSSセレクタ（なければnull）",
     "date": "公開日要素のCSSセレクタ（なければnull）",
-    "date_format": "日付フォーマット（例：Y-m-d, Y年m月d日）"
+    "date_format": "日付フォーマット（例：Y-m-d, Y年m月d日）",
+    "doi": "DOI要素のCSSセレクタ（なければnull）",
+    "doi_attr": "DOIの取得方法（textContent, href, data-doi など）",
+    "doi_pattern": "DOI文字列から実際のDOIを抽出する正規表現パターン（例：10\\.\\d+/[^\\s]+）"
   },
   "base_url": "相対URLを絶対URLに変換するためのベースURL",
   "sample_papers": [
     {
       "title": "検出された論文タイトル（動作確認用，2-3件）",
-      "url": "論文URL"
+      "url": "論文URL",
+      "doi": "DOI（検出できた場合）"
     }
   ]
 }
 
 重要:
+- is_article_list_page: 論文のタイトル，著者，概要などを含む最新論文一覧ページならtrue
+- page_type: ページの実際の種類を正確に判定してください
+- article_list_url: is_article_list_pageがfalseの場合，同じサイト内の最新論文一覧ページへのリンクを探してください（"Latest Articles"，"Recent"，"新着論文"，"最新号"などのリンク）
+- selectorsはis_article_list_pageがtrueの場合のみ必須です
 - CSSセレクタは具体的かつ正確に記述してください
-- 複数のセレクタが考えられる場合は，最も安定して使えるものを選んでください
 - paper_containerは各論文が1つずつ含まれる最小の繰り返し要素を指定してください
-- 論文のみを対象とし，ニュース記事や告知は除外できるセレクタにしてください
+- DOIは "10.XXXX/..." の形式で，リンクhref（https://doi.org/10.XXXX/...），data属性，またはテキストに含まれることがあります
 - JSON形式のみで回答し，他のテキストは含めないでください
 PROMPT;
     }
@@ -297,6 +335,7 @@ PROMPT;
             'authors' => [],
             'abstract' => null,
             'published_date' => null,
+            'doi' => null,
         ];
 
         // Extract title
@@ -358,7 +397,61 @@ PROMPT;
             }
         }
 
+        // Extract DOI
+        if (!empty($selectors['doi'])) {
+            $doiXpath = $this->cssToXpath($selectors['doi'], true);
+            $doiNodes = $xpath->query($doiXpath, $container);
+            if ($doiNodes && $doiNodes->length > 0) {
+                $doiNode = $doiNodes->item(0);
+                $attr = $selectors['doi_attr'] ?? 'textContent';
+                $doiRaw = $attr === 'textContent'
+                    ? trim($doiNode->textContent)
+                    : trim($doiNode->getAttribute($attr));
+                $paper['doi'] = $this->extractDoi($doiRaw, $selectors['doi_pattern'] ?? null);
+            }
+        }
+
+        // Try to extract DOI from URL if not found via selector
+        if (empty($paper['doi']) && !empty($paper['url'])) {
+            $paper['doi'] = $this->extractDoiFromUrl($paper['url']);
+        }
+
         return $paper;
+    }
+
+    /**
+     * Extract DOI from raw string using pattern or default regex
+     */
+    private function extractDoi(string $raw, ?string $pattern = null): ?string
+    {
+        if (empty($raw)) {
+            return null;
+        }
+
+        // Default DOI pattern: 10.XXXX/... (with various allowed characters)
+        $defaultPattern = '/10\.\d{4,}\/[^\s"\'<>]+/';
+        $usePattern = $pattern ? '/' . $pattern . '/' : $defaultPattern;
+
+        if (preg_match($usePattern, $raw, $matches)) {
+            // Clean up trailing punctuation
+            $doi = rtrim($matches[0], '.,;:)');
+            return $doi;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract DOI from URL (e.g., https://doi.org/10.1234/...)
+     */
+    private function extractDoiFromUrl(string $url): ?string
+    {
+        // Check for doi.org URL
+        if (preg_match('/(?:doi\.org|dx\.doi\.org)\/(10\.\d{4,}\/[^\s"\'<>]+)/i', $url, $matches)) {
+            return rtrim($matches[1], '.,;:)');
+        }
+
+        return null;
     }
 
     /**
@@ -666,7 +759,7 @@ PROMPT;
         $pubDate = date('r');
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        $xml .= '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">' . "\n";
+        $xml .= '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/">' . "\n";
         $xml .= '<channel>' . "\n";
         $xml .= '  <title>' . htmlspecialchars($journal->name) . '</title>' . "\n";
         $xml .= '  <link>' . htmlspecialchars($sourceUrl) . '</link>' . "\n";
@@ -680,6 +773,7 @@ PROMPT;
             $link = htmlspecialchars($paper['url'] ?? $sourceUrl);
             $description = htmlspecialchars($paper['abstract'] ?? '');
             $authors = is_array($paper['authors'] ?? null) ? implode(', ', $paper['authors']) : '';
+            $doi = $paper['doi'] ?? null;
             $pubDateItem = !empty($paper['published_date'])
                 ? date('r', strtotime($paper['published_date']))
                 : $pubDate;
@@ -692,9 +786,22 @@ PROMPT;
             }
             if ($authors) {
                 $xml .= '    <author>' . htmlspecialchars($authors) . '</author>' . "\n";
+                // Also add dc:creator for each author
+                foreach ($paper['authors'] ?? [] as $author) {
+                    $xml .= '    <dc:creator>' . htmlspecialchars(trim($author)) . '</dc:creator>' . "\n";
+                }
+            }
+            if ($doi) {
+                $xml .= '    <dc:identifier>doi:' . htmlspecialchars($doi) . '</dc:identifier>' . "\n";
+                $xml .= '    <prism:doi>' . htmlspecialchars($doi) . '</prism:doi>' . "\n";
             }
             $xml .= '    <pubDate>' . $pubDateItem . '</pubDate>' . "\n";
-            $xml .= '    <guid isPermaLink="true">' . $link . '</guid>' . "\n";
+            // Use DOI as guid if available, otherwise use link
+            if ($doi) {
+                $xml .= '    <guid isPermaLink="false">doi:' . htmlspecialchars($doi) . '</guid>' . "\n";
+            } else {
+                $xml .= '    <guid isPermaLink="true">' . $link . '</guid>' . "\n";
+            }
             $xml .= '  </item>' . "\n";
         }
 
@@ -957,22 +1064,69 @@ PROMPT;
         }
 
         $analysisResult = $this->analyzePageStructure($pageResult['html'], $url);
-        if (!$analysisResult['success']) {
-            return [
-                'success' => false,
-                'error' => 'AI analysis failed: ' . ($analysisResult['error'] ?? 'Unknown error'),
-            ];
-        }
 
-        return [
-            'success' => true,
-            'selectors' => $analysisResult['selectors'] ?? [],
-            'sample_papers' => $analysisResult['sample_papers'] ?? [],
-            'provider' => $analysisResult['provider'],
+        // Return analysis result with page type info even on failure
+        $response = [
+            'success' => $analysisResult['success'],
+            'is_article_list_page' => $analysisResult['is_article_list_page'] ?? null,
+            'page_type' => $analysisResult['page_type'] ?? null,
+            'page_type_reason' => $analysisResult['page_type_reason'] ?? null,
+            'provider' => $analysisResult['provider'] ?? null,
             'page_size' => [
                 'original' => $pageResult['original_size'],
                 'cleaned' => $pageResult['cleaned_size'],
             ],
         ];
+
+        if (!$analysisResult['success']) {
+            $response['error'] = $analysisResult['error'] ?? 'AI analysis failed';
+            // Include redirect suggestion if available
+            if (!empty($analysisResult['article_list_url'])) {
+                $response['article_list_url'] = $analysisResult['article_list_url'];
+            }
+            return $response;
+        }
+
+        $response['selectors'] = $analysisResult['selectors'] ?? [];
+        $response['sample_papers'] = $analysisResult['sample_papers'] ?? [];
+
+        return $response;
+    }
+
+    /**
+     * Test page analysis with automatic redirect to article list page
+     * If the initial page is not an article list, it will try the suggested URL
+     */
+    public function testPageAnalysisWithRedirect(string $url, User $user, int $maxRedirects = 2): array
+    {
+        $attempts = 0;
+        $currentUrl = $url;
+        $redirectHistory = [];
+
+        while ($attempts < $maxRedirects) {
+            $attempts++;
+            $result = $this->testPageAnalysis($currentUrl, $user);
+
+            // If successful or no redirect suggestion, return as-is
+            if ($result['success'] || empty($result['article_list_url'])) {
+                $result['redirect_history'] = $redirectHistory;
+                $result['final_url'] = $currentUrl;
+                return $result;
+            }
+
+            // Follow the redirect
+            $redirectHistory[] = [
+                'from' => $currentUrl,
+                'to' => $result['article_list_url'],
+                'page_type' => $result['page_type'],
+            ];
+            $currentUrl = $result['article_list_url'];
+        }
+
+        // Max redirects reached
+        $result = $this->testPageAnalysis($currentUrl, $user);
+        $result['redirect_history'] = $redirectHistory;
+        $result['final_url'] = $currentUrl;
+        return $result;
     }
 }
