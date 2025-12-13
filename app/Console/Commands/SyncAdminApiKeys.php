@@ -122,24 +122,14 @@ class SyncAdminApiKeys extends Command
 
         foreach ($defaultJournals as $journalConfig) {
             $name = $journalConfig['name'];
-            // IDは正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
-            $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name));
-            $journalId = $baseId . '-' . $admin->id;
 
-            // 既に同じIDの論文誌が存在する場合はスキップ
-            if (Journal::where('id', $journalId)->exists()) {
+            // 同名ジャーナルの重複チェック（nameベース）
+            if (Journal::where('user_id', $admin->id)->where('name', $name)->exists()) {
                 $this->line("  スキップ（既存）: {$name}");
                 continue;
             }
 
-            // 同じ名前の論文誌が存在する場合もスキップ
-            if (Journal::where('user_id', $admin->id)->where('name', $name)->exists()) {
-                $this->line("  スキップ（同名）: {$name}");
-                continue;
-            }
-
             $journal = Journal::create([
-                'id' => $journalId,
                 'user_id' => $admin->id,
                 'name' => $name,
                 'rss_url' => $journalConfig['rss_url'],

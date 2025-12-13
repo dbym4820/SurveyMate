@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('journals', function (Blueprint $table) {
-            $table->string('id', 191)->primary()->comment('自動生成ID（正式名称から生成）');
+            $table->string('id', 191)->primary()->comment('自動生成ULID');
             $table->unsignedBigInteger('user_id')->nullable()->comment('所有ユーザーID');
             $table->string('name', 500)->comment('論文誌の正式名称');
             $table->string('rss_url', 500)->comment('RSSフィードURL');

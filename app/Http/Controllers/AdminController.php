@@ -139,17 +139,12 @@ class AdminController extends Controller
             }
         }
 
-        // IDを正式名称から自動生成（英数字のみ，小文字，ユーザーID付加）
-        $baseId = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $journalData['name']));
-        $journalId = $baseId . '-' . $user->id;
-
-        // IDの重複チェック（ユーザーごと）
-        $existingJournal = Journal::forUser($user->id)->where('id', $journalId)->first();
+        // 名前の重複チェック（ユーザーごと）
+        $existingJournal = Journal::forUser($user->id)->where('name', $journalData['name'])->first();
         if ($existingJournal) {
             return response()->json(['error' => 'この論文誌名は既に使用されています'], 400);
         }
 
-        $journalData['id'] = $journalId;
         $journal = Journal::create($journalData);
 
         // 初回フェッチを実行
