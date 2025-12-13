@@ -101,6 +101,29 @@ ADMIN_EMAIL=admin@example.com
 DEFAULT_JOURNALS=
 ```
 
+### デフォルト要約テンプレート・調査観点の設定
+
+新規ユーザーの初期設定として表示されるデフォルトの要約テンプレートと調査観点は，以下のテキストファイルで管理されています：
+
+```
+config/generative_ai_settings/
+├── research_fields.txt      # 研究分野・興味
+├── summary_perspective.txt  # 要約観点
+├── reading_focus.txt        # 読解着眼点
+└── summary_template.txt     # 要約テンプレート
+```
+
+**修正方法：**
+
+1. 該当するテキストファイルを直接編集
+2. 変更を保存
+3. 本番環境では設定キャッシュをクリア：
+   ```bash
+   php artisan config:clear
+   ```
+
+これらのファイルはGit管理されているため，`git pull`でデプロイ先に自動反映されます．
+
 ## 開発コマンド
 
 ```bash
