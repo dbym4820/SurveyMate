@@ -36,7 +36,15 @@ class SessionAuth
         $request->attributes->set('user', $session->user);
         $request->attributes->set('session', $session);
 
-        return $next($request);
+        // スライディングセッション：アクセスごとに有効期限を更新
+        $sessionLifetime = config('session.lifetime', 20160) * 60; // 分を秒に変換
+        $session->expires_at = now()->addSeconds($sessionLifetime);
+        $session->save();
+
+        $response = $next($request);
+
+        // クッキーの有効期限も更新
+        return $response->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
     }
 
     private function getSessionId(Request $request): ?string

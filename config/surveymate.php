@@ -11,9 +11,31 @@
 $defaultJournals = [];
 $envJournals = env('DEFAULT_JOURNALS', '');
 
+// 利用可能なテーマカラー（Tailwind CSS）
+$journalColors = [
+    'bg-red-500',
+    'bg-orange-500',
+    'bg-amber-500',
+    'bg-yellow-500',
+    'bg-lime-500',
+    'bg-green-500',
+    'bg-emerald-500',
+    'bg-teal-500',
+    'bg-cyan-500',
+    'bg-sky-500',
+    'bg-blue-500',
+    'bg-indigo-500',
+    'bg-violet-500',
+    'bg-purple-500',
+    'bg-fuchsia-500',
+    'bg-pink-500',
+    'bg-rose-500',
+];
+
 if (!empty($envJournals)) {
     // セミコロンで区切る（ジャーナル名に空白やカンマを含むことが可能）
     $entries = array_filter(array_map('trim', explode(';', $envJournals)));
+    $colorIndex = 0;
     foreach ($entries as $entry) {
         $parts = explode('|', $entry, 2);
         if (count($parts) === 2) {
@@ -22,8 +44,9 @@ if (!empty($envJournals)) {
                 'id' => strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name)),
                 'name' => $name,
                 'rss_url' => trim($parts[1]),
-                'color' => 'bg-gray-500',
+                'color' => $journalColors[$colorIndex % count($journalColors)],
             ];
+            $colorIndex++;
         }
     }
 }

@@ -6,6 +6,13 @@ import api from '../api';
 import type { User } from '../types';
 import TermsModal from './TermsModal';
 
+// Credential Management API の型定義
+declare global {
+  interface Window {
+    PasswordCredential?: new (data: { id: string; password: string }) => Credential;
+  }
+}
+
 type FormMode = 'login' | 'register';
 
 interface LoginFormProps {
@@ -49,6 +56,20 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
 
   const handleLogin = async (): Promise<void> => {
     const data = await api.auth.login(userId, password);
+
+    // Credential Management API でパスワードを保存（HTTPS または localhost のみ）
+    if (window.PasswordCredential && window.isSecureContext) {
+      try {
+        const cred = new window.PasswordCredential({
+          id: userId,
+          password: password,
+        });
+        await navigator.credentials.store(cred);
+      } catch {
+        // パスワード保存に失敗しても続行（非対応環境では無視）
+      }
+    }
+
     onLogin(data.user);
   };
 
@@ -134,7 +155,7 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
           </Link>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} method="post" className="space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
