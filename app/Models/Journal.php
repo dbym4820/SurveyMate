@@ -18,6 +18,10 @@ class Journal extends Model
         'name',
         'rss_url',
         'source_type',
+        'rss_extraction_config',
+        'rss_analysis_status',
+        'rss_analysis_error',
+        'rss_analyzed_at',
         'color',
         'is_active',
         'last_fetched_at',
@@ -37,6 +41,8 @@ class Journal extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'last_fetched_at' => 'datetime',
+        'rss_extraction_config' => 'array',
+        'rss_analyzed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -65,6 +71,51 @@ class Journal extends Model
     public function isAiGenerated(): bool
     {
         return $this->source_type === 'ai_generated';
+    }
+
+    /**
+     * Check if this journal has RSS extraction rules
+     */
+    public function hasExtractionRules(): bool
+    {
+        return !empty($this->rss_extraction_config)
+            && $this->rss_analysis_status === 'success';
+    }
+
+    /**
+     * Mark RSS analysis as pending
+     */
+    public function markAnalysisPending(): void
+    {
+        $this->update([
+            'rss_analysis_status' => 'pending',
+            'rss_analysis_error' => null,
+        ]);
+    }
+
+    /**
+     * Mark RSS analysis as success
+     */
+    public function markAnalysisSuccess(array $config): void
+    {
+        $this->update([
+            'rss_extraction_config' => $config,
+            'rss_analysis_status' => 'success',
+            'rss_analysis_error' => null,
+            'rss_analyzed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Mark RSS analysis as failed
+     */
+    public function markAnalysisFailed(string $error): void
+    {
+        $this->update([
+            'rss_analysis_status' => 'error',
+            'rss_analysis_error' => $error,
+            'rss_analyzed_at' => now(),
+        ]);
     }
 
     public function scopeActive($query)

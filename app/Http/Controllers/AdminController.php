@@ -10,6 +10,7 @@ use App\Models\FetchLog;
 use App\Models\User;
 use App\Services\RssFetcherService;
 use App\Services\AiRssGeneratorService;
+use App\Services\RssStructureAnalyzer;
 
 class AdminController extends Controller
 {
@@ -19,10 +20,17 @@ class AdminController extends Controller
     /** @var AiRssGeneratorService */
     private $aiRssGenerator;
 
-    public function __construct(RssFetcherService $rssFetcher, AiRssGeneratorService $aiRssGenerator)
-    {
+    /** @var RssStructureAnalyzer */
+    private $rssAnalyzer;
+
+    public function __construct(
+        RssFetcherService $rssFetcher,
+        AiRssGeneratorService $aiRssGenerator,
+        RssStructureAnalyzer $rssAnalyzer
+    ) {
         $this->rssFetcher = $rssFetcher;
         $this->aiRssGenerator = $aiRssGenerator;
+        $this->rssAnalyzer = $rssAnalyzer;
     }
 
     // ======================================
@@ -148,6 +156,7 @@ class AdminController extends Controller
         $journal = Journal::create($journalData);
 
         // 初回フェッチを実行
+        $analysisResult = null;
         if ($journal->isAiGenerated()) {
             // AI生成の場合：ページ構造を解析してセレクタを保存
             $setupResult = $this->aiRssGenerator->setupFeed($journal, $user);
@@ -161,9 +170,37 @@ class AdminController extends Controller
                 $fetchResult = $setupResult;
             }
         } else {
-            // 通常RSSの場合
+            // 通常RSSの場合：AIでRSS構造を解析（APIキーがある場合のみ）
+            if ($user->hasEffectiveClaudeApiKey() || $user->hasEffectiveOpenaiApiKey()) {
+                $journal->markAnalysisPending();
+                $this->rssAnalyzer->setUser($user);
+
+                $analysisResult = $this->rssAnalyzer->analyzeRssFeed($journal);
+
+                if ($analysisResult['success']) {
+                    $journal->markAnalysisSuccess($analysisResult['config']);
+                } else {
+                    // 解析失敗でもジャーナル登録は継続（従来のSimplePieでフェッチ）
+                    $journal->markAnalysisFailed($analysisResult['error'] ?? 'Unknown error');
+                }
+            }
+
+            // フェッチ実行
             $fetchResult = $this->rssFetcher->fetchJournal($journal);
             $message = '論文誌を追加しました';
+            $newPapers = $fetchResult['new_papers'] ?? 0;
+            if ($newPapers > 0) {
+                $message .= '（' . $newPapers . '件の論文を登録）';
+            }
+
+            // 解析結果の情報を追加
+            if ($analysisResult) {
+                if ($analysisResult['success']) {
+                    $message .= '．RSS構造をAIで解析しました';
+                } else {
+                    $message .= '．RSS構造の解析に失敗しました（従来方式でフェッチ）';
+                }
+            }
         }
 
         // generatedFeedの情報も返す

@@ -95,19 +95,20 @@ class AiSummaryService
      * データソースの優先順位に従って要約用コンテンツを準備
      *
      * 優先順位:
-     * 1. PDF（ローカルまたはリモート）
-     * 2. full_text（既に取得済みの本文）
-     * 3. DOIページから本文を取得
-     * 4. アブストラクト
-     * 5. タイトル+利用可能なメタデータ
+     * 1. ローカルPDF（実際にダウンロード済みのPDF）
+     * 2. DOIページから本文を取得
+     * 3. full_text（既に取得済みの本文）
+     * 4. リモートPDF URL（PDFがリモートにのみある場合）
+     * 5. アブストラクト
+     * 6. タイトル+利用可能なメタデータ
      *
      * @param Paper $paper
      * @return array ['source' => string, 'content' => string|null, 'pdf_url' => string|null, 'pdf_available' => bool]
      */
     private function prepareContentForSummary(Paper $paper): array
     {
-        // 1. PDF（ローカルまたはリモート）があるかチェック
-        if ($paper->hasLocalPdf() || $paper->pdf_url) {
+        // 1. ローカルPDF（実際にダウンロード済み）があるかチェック
+        if ($paper->hasLocalPdf()) {
             return [
                 'source' => 'pdf',
                 'content' => null,
@@ -116,17 +117,7 @@ class AiSummaryService
             ];
         }
 
-        // 2. 既に取得済みの本文があるかチェック
-        if ($paper->hasFullText()) {
-            return [
-                'source' => 'full_text',
-                'content' => $paper->full_text,
-                'pdf_url' => null,
-                'pdf_available' => false,
-            ];
-        }
-
-        // 3. DOIがあればDOIページから本文取得を試みる
+        // 2. DOIがあればDOIページから本文取得を試みる（原則DOI先を参照）
         if (!empty($paper->doi)) {
             Log::info("Attempting to fetch full text from DOI for paper {$paper->id}");
 
@@ -178,7 +169,27 @@ class AiSummaryService
             }
         }
 
-        // 4. アブストラクトがあればそれを使用
+        // 3. 既に取得済みの本文があるかチェック
+        if ($paper->hasFullText()) {
+            return [
+                'source' => 'full_text',
+                'content' => $paper->full_text,
+                'pdf_url' => null,
+                'pdf_available' => false,
+            ];
+        }
+
+        // 4. リモートPDF URL（ダウンロード済みでないPDF）がある場合
+        if ($paper->pdf_url) {
+            return [
+                'source' => 'pdf',
+                'content' => null,
+                'pdf_url' => $paper->pdf_url,
+                'pdf_available' => true,
+            ];
+        }
+
+        // 5. アブストラクトがあればそれを使用
         if (!empty($paper->abstract)) {
             return [
                 'source' => 'abstract',
@@ -188,7 +199,7 @@ class AiSummaryService
             ];
         }
 
-        // 5. 最終手段：タイトルと利用可能なメタデータのみ
+        // 6. 最終手段：タイトルと利用可能なメタデータのみ
         return [
             'source' => 'minimal',
             'content' => null,

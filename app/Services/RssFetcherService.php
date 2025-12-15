@@ -121,8 +121,37 @@ class RssFetcherService
             $newPapers = 0;
             $fullTextFetched = 0;
 
-            foreach ($items as $item) {
-                $paper = $this->parseFeedItem($item, $journal);
+            // AI解析で生成した抽出ルールがあるか確認
+            $useExtractionRules = $journal->hasExtractionRules();
+            $rawXml = null;
+
+            if ($useExtractionRules) {
+                // 抽出ルールがある場合は生XMLも取得
+                $rawXml = $this->fetchRawXml($journal->rss_url);
+            }
+
+            foreach ($items as $index => $item) {
+                $paper = null;
+
+                // 抽出ルールがある場合は優先して使用
+                if ($useExtractionRules && $rawXml) {
+                    try {
+                        $paper = $this->parseWithExtractionRules($rawXml, $index, $journal);
+                    } catch (\Exception $e) {
+                        Log::warning("Extraction rule failed for item {$index}", [
+                            'journal_id' => $journal->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                        // フォールバック: SimplePieで解析
+                        $paper = $this->parseFeedItem($item, $journal);
+                    }
+                }
+
+                // 抽出ルールがない場合，またはルール適用に失敗した場合
+                if (!$paper) {
+                    $paper = $this->parseFeedItem($item, $journal);
+                }
+
                 if ($paper) {
                     $result = $this->upsertPaper($paper);
                     if ($result['inserted']) {
@@ -586,6 +615,315 @@ class RssFetcherService
         }
 
         return $cleanAbstract;
+    }
+
+    /**
+     * RSSフィードの生XMLを取得
+     */
+    private function fetchRawXml(string $url): ?string
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (compatible; SurveyMate/2.0; Academic Research)',
+                    'Accept' => 'application/rss+xml, application/xml, text/xml, */*',
+                ])
+                ->get($url);
+
+            if ($response->successful()) {
+                return $response->body();
+            }
+        } catch (\Exception $e) {
+            Log::warning("Failed to fetch raw XML", ['url' => $url, 'error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    /**
+     * AI生成の抽出ルールを使ってアイテムをパース
+     */
+    private function parseWithExtractionRules(string $xml, int $itemIndex, Journal $journal): ?array
+    {
+        $config = $journal->rss_extraction_config;
+        if (!$config || !isset($config['fields'])) {
+            return null;
+        }
+
+        // XMLをDOMでパース
+        $dom = new \DOMDocument();
+        $dom->preserveWhiteSpace = false;
+        @$dom->loadXML($xml);
+
+        $xpath = new \DOMXPath($dom);
+
+        // 名前空間を登録
+        if (isset($config['namespaces']) && is_array($config['namespaces'])) {
+            foreach ($config['namespaces'] as $prefix => $uri) {
+                $xpath->registerNamespace($prefix, $uri);
+            }
+        }
+
+        // アイテム要素を取得
+        $itemElement = $config['item_element'] ?? 'item';
+        $items = $dom->getElementsByTagName($itemElement);
+
+        if ($items->length === 0) {
+            // Atomの場合はentry
+            $items = $dom->getElementsByTagName('entry');
+        }
+
+        if ($itemIndex >= $items->length) {
+            return null;
+        }
+
+        $item = $items->item($itemIndex);
+        $fields = $config['fields'];
+
+        // タイトル（必須）
+        $title = $this->extractFieldValue($item, $fields['title'] ?? null, $xpath);
+        if (!$title) {
+            return null;
+        }
+
+        // タイトルをクリーンアップ
+        $title = trim(strip_tags(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+
+        // 各フィールドを抽出
+        $authors = [];
+        if (isset($fields['authors'])) {
+            $authorsValue = $this->extractFieldValue($item, $fields['authors'], $xpath, true);
+            if (is_array($authorsValue)) {
+                $authors = array_map(function ($a) {
+                    return trim(strip_tags(html_entity_decode($a, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+                }, $authorsValue);
+            } elseif (is_string($authorsValue)) {
+                $authors = array_map('trim', explode(',', $authorsValue));
+            }
+        }
+
+        $publishedDate = null;
+        if (isset($fields['published_date'])) {
+            $dateValue = $this->extractFieldValue($item, $fields['published_date'], $xpath);
+            if ($dateValue) {
+                $publishedDate = $this->parseDateValue($dateValue);
+            }
+        }
+
+        $doi = null;
+        if (isset($fields['doi'])) {
+            $doiValue = $this->extractFieldValue($item, $fields['doi'], $xpath);
+            if ($doiValue) {
+                // DOIパターンで抽出
+                $pattern = $fields['doi']['pattern'] ?? '10\.\d{4,}/[^\s<>"\']+';
+                if (preg_match('/' . $pattern . '/', $doiValue, $matches)) {
+                    $doi = $this->cleanDoi($matches[0]);
+                }
+            }
+        }
+
+        $abstract = null;
+        if (isset($fields['abstract'])) {
+            $abstractValue = $this->extractFieldValue($item, $fields['abstract'], $xpath);
+            if ($abstractValue) {
+                $abstract = $this->cleanAbstract($abstractValue);
+            }
+        }
+
+        $url = null;
+        if (isset($fields['url'])) {
+            $url = $this->extractFieldValue($item, $fields['url'], $xpath);
+            // URLのhref属性をチェック
+            if (!$url && isset($fields['url']['attribute'])) {
+                // 別途処理
+            }
+        }
+
+        // summary_parsing が有効な場合，summaryから追加情報を抽出
+        if (isset($config['summary_parsing']) && $config['summary_parsing']['enabled']) {
+            $summaryResult = $this->extractFromSummary($item, $config['summary_parsing'], $xpath);
+
+            // 既存値がない場合のみ上書き
+            if (empty($authors) && !empty($summaryResult['authors'])) {
+                $authors = $summaryResult['authors'];
+            }
+            if (!$doi && !empty($summaryResult['doi'])) {
+                $doi = $summaryResult['doi'];
+            }
+            if (!$abstract && !empty($summaryResult['abstract'])) {
+                $abstract = $summaryResult['abstract'];
+            }
+        }
+
+        // External ID: prefer DOI, then link
+        $externalId = $doi ?? $url ?? null;
+
+        return [
+            'journal_id' => $journal->id,
+            'external_id' => $externalId,
+            'title' => $title,
+            'authors' => $authors,
+            'abstract' => $abstract,
+            'url' => $url,
+            'doi' => $doi,
+            'published_date' => $publishedDate,
+        ];
+    }
+
+    /**
+     * 抽出ルールに基づいてフィールド値を取得
+     */
+    private function extractFieldValue(\DOMNode $item, ?array $fieldConfig, \DOMXPath $xpath, bool $multiple = false)
+    {
+        if (!$fieldConfig) {
+            return null;
+        }
+
+        $element = $fieldConfig['element'] ?? null;
+        if (!$element) {
+            return null;
+        }
+
+        // 複数の候補がある場合（パイプ区切り）
+        $candidates = explode('|', $element);
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim($candidate);
+
+            // 名前空間付きの要素
+            if (strpos($candidate, ':') !== false) {
+                [$prefix, $localName] = explode(':', $candidate, 2);
+                $namespace = $fieldConfig['namespace'] ?? null;
+
+                if ($namespace) {
+                    $nodes = $xpath->query(".//{$prefix}:{$localName}", $item);
+                } else {
+                    // 名前空間なしでタグ名検索
+                    $nodes = $item->getElementsByTagName($localName);
+                }
+            } else {
+                $nodes = $item->getElementsByTagName($candidate);
+            }
+
+            if ($nodes && $nodes->length > 0) {
+                if ($multiple) {
+                    $values = [];
+                    foreach ($nodes as $node) {
+                        $value = $this->getNodeValue($node, $fieldConfig);
+                        if ($value) {
+                            $values[] = $value;
+                        }
+                    }
+                    if (!empty($values)) {
+                        return $values;
+                    }
+                } else {
+                    $value = $this->getNodeValue($nodes->item(0), $fieldConfig);
+                    if ($value) {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * ノードから値を取得（属性または内容）
+     */
+    private function getNodeValue(\DOMNode $node, array $fieldConfig): ?string
+    {
+        $attribute = $fieldConfig['attribute'] ?? null;
+
+        if ($attribute && $node instanceof \DOMElement) {
+            $value = $node->getAttribute($attribute);
+            if ($value) {
+                return $value;
+            }
+        }
+
+        // 子要素がある場合
+        $childElement = $fieldConfig['child_element'] ?? null;
+        if ($childElement && $node instanceof \DOMElement) {
+            $children = $node->getElementsByTagName($childElement);
+            if ($children->length > 0) {
+                return $children->item(0)->textContent;
+            }
+        }
+
+        return $node->textContent ?: null;
+    }
+
+    /**
+     * summary/descriptionタグから正規表現で情報を抽出
+     */
+    private function extractFromSummary(\DOMNode $item, array $summaryConfig, \DOMXPath $xpath): array
+    {
+        $result = ['authors' => null, 'doi' => null, 'abstract' => null];
+
+        $sourceElement = $summaryConfig['source_element'] ?? 'description|summary';
+        $patterns = $summaryConfig['patterns'] ?? [];
+
+        // summaryの内容を取得
+        $summaryContent = null;
+        $candidates = explode('|', $sourceElement);
+
+        foreach ($candidates as $candidate) {
+            $nodes = $item->getElementsByTagName(trim($candidate));
+            if ($nodes->length > 0) {
+                $summaryContent = $nodes->item(0)->textContent;
+                break;
+            }
+        }
+
+        if (!$summaryContent) {
+            return $result;
+        }
+
+        // 各パターンで抽出
+        if (!empty($patterns['authors'])) {
+            if (preg_match('/' . $patterns['authors'] . '/i', $summaryContent, $matches)) {
+                $authorsStr = $matches[1] ?? $matches[0];
+                $result['authors'] = array_map('trim', preg_split('/[,;]/', $authorsStr));
+            }
+        }
+
+        if (!empty($patterns['doi'])) {
+            if (preg_match('/' . $patterns['doi'] . '/i', $summaryContent, $matches)) {
+                $result['doi'] = $this->cleanDoi($matches[1] ?? $matches[0]);
+            }
+        }
+
+        if (!empty($patterns['abstract'])) {
+            if (preg_match('/' . $patterns['abstract'] . '/is', $summaryContent, $matches)) {
+                $result['abstract'] = $this->cleanAbstract($matches[1] ?? $matches[0]);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * 日付値をパース
+     */
+    private function parseDateValue(string $value): ?string
+    {
+        try {
+            $date = new \DateTime($value);
+            return $date->format('Y-m-d');
+        } catch (\Exception $e) {
+            // フォーマットを変えて再試行
+            $formats = ['Y-m-d', 'Y/m/d', 'd M Y', 'M d, Y', 'Y-m-d\TH:i:s'];
+            foreach ($formats as $format) {
+                $date = \DateTime::createFromFormat($format, $value);
+                if ($date) {
+                    return $date->format('Y-m-d');
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
