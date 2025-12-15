@@ -12,16 +12,15 @@ $defaultJournals = [];
 $envJournals = env('DEFAULT_JOURNALS', '');
 
 // 利用可能なテーマカラー（Tailwind CSS）
+// 白や明るすぎる色（yellow, lime）は除外して視認性を確保
 $journalColors = [
     'bg-red-500',
     'bg-orange-500',
-    'bg-amber-500',
-    'bg-yellow-500',
-    'bg-lime-500',
+    'bg-amber-600',
     'bg-green-500',
     'bg-emerald-500',
     'bg-teal-500',
-    'bg-cyan-500',
+    'bg-cyan-600',
     'bg-sky-500',
     'bg-blue-500',
     'bg-indigo-500',
