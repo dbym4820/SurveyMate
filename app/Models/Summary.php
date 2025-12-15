@@ -13,6 +13,7 @@ class Summary extends Model
         'paper_id',
         'ai_provider',
         'ai_model',
+        'input_source',  // 要約生成に使用したデータソース (pdf, full_text, doi_fetch, abstract, minimal)
         'summary_text',
         'purpose',
         'methodology',

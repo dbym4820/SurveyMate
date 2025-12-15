@@ -801,13 +801,33 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
                     <span className="font-medium text-gray-900 text-sm sm:text-base">AI要約</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
                       {summary.ai_provider}
                     </span>
                     {summary.ai_model && (
                       <span className="text-xs text-gray-500 hidden sm:inline">
                         {summary.ai_model}
+                      </span>
+                    )}
+                    {/* データソース表示 */}
+                    {summary.input_source_label && (
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          summary.input_source === 'minimal'
+                            ? 'bg-amber-100 text-amber-700'
+                            : summary.input_source === 'abstract'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}
+                        title={`データソース: ${summary.input_source_label}`}
+                      >
+                        {summary.input_source_label}
+                      </span>
+                    )}
+                    {!summary.input_source_label && summary.input_source === null && (
+                      <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-500">
+                        ソース不明
                       </span>
                     )}
                     {/* 履歴ボタン（2件以上の履歴がある場合のみ表示） */}
@@ -855,7 +875,7 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
                                       <span className="w-2 h-2 rounded-full border border-gray-300 flex-shrink-0" />
                                     )}
                                     <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="text-xs font-medium text-gray-700">
                                           {s.ai_provider}
                                         </span>
@@ -865,6 +885,11 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
                                           </span>
                                         )}
                                       </div>
+                                      {s.input_source_label && (
+                                        <div className="text-[10px] text-gray-500 mt-0.5">
+                                          {s.input_source_label}
+                                        </div>
+                                      )}
                                       <div className="text-[10px] text-gray-400 mt-0.5">
                                         {formatDateTime(s.created_at)}
                                       </div>

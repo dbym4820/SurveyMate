@@ -89,6 +89,7 @@ class SummaryController extends Controller
                 'paper_id' => $paper->id,
                 'ai_provider' => $result['provider'],
                 'ai_model' => $result['model'],
+                'input_source' => $result['input_source'] ?? null,
                 'summary_text' => $result['summary_text'],
                 'purpose' => $result['purpose'] ?? null,
                 'methodology' => $result['methodology'] ?? null,
@@ -106,6 +107,8 @@ class SummaryController extends Controller
                     'id' => $summary->id,
                     'ai_provider' => $summary->ai_provider,
                     'ai_model' => $summary->ai_model,
+                    'input_source' => $summary->input_source,
+                    'input_source_label' => $this->getInputSourceLabel($summary->input_source),
                     'summary_text' => $summary->summary_text,
                     'purpose' => $summary->purpose,
                     'methodology' => $summary->methodology,
@@ -133,14 +136,17 @@ class SummaryController extends Controller
             return response()->json(['error' => '論文が見つかりません'], 404);
         }
 
+        $self = $this;
         $summaries = Summary::where('paper_id', $paperId)
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($s) {
+            ->map(function ($s) use ($self) {
                 return [
                     'id' => $s->id,
                     'ai_provider' => $s->ai_provider,
                     'ai_model' => $s->ai_model,
+                    'input_source' => $s->input_source,
+                    'input_source_label' => $self->getInputSourceLabel($s->input_source),
                     'summary_text' => $s->summary_text,
                     'purpose' => $s->purpose,
                     'methodology' => $s->methodology,
@@ -152,5 +158,21 @@ class SummaryController extends Controller
             });
 
         return response()->json($summaries);
+    }
+
+    /**
+     * 入力ソースの日本語ラベルを取得
+     */
+    private function getInputSourceLabel(?string $source): string
+    {
+        return match ($source) {
+            'pdf' => 'PDF本文',
+            'pdf_fetched' => 'PDF本文（DOI経由で取得）',
+            'full_text' => '本文テキスト',
+            'doi_fetch' => 'DOIページから取得したテキスト',
+            'abstract' => 'アブストラクトのみ',
+            'minimal' => 'タイトル・メタデータのみ（※推測を含む可能性あり）',
+            default => '不明',
+        };
     }
 }

@@ -236,6 +236,8 @@ class PaperController extends Controller
                     'id' => $s->id,
                     'ai_provider' => $s->ai_provider,
                     'ai_model' => $s->ai_model,
+                    'input_source' => $s->input_source,
+                    'input_source_label' => $this->getInputSourceLabel($s->input_source),
                     'summary_text' => $s->summary_text,
                     'purpose' => $s->purpose,
                     'methodology' => $s->methodology,
@@ -256,5 +258,21 @@ class PaperController extends Controller
         ];
 
         return $data;
+    }
+
+    /**
+     * 入力ソースの日本語ラベルを取得
+     */
+    private function getInputSourceLabel(?string $source): string
+    {
+        return match ($source) {
+            'pdf' => 'PDF本文',
+            'pdf_fetched' => 'PDF本文（DOI経由で取得）',
+            'full_text' => '本文テキスト',
+            'doi_fetch' => 'DOIページから取得したテキスト',
+            'abstract' => 'アブストラクトのみ',
+            'minimal' => 'タイトル・メタデータのみ（※推測を含む可能性あり）',
+            default => '不明',
+        };
     }
 }

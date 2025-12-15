@@ -69,6 +69,8 @@ export interface Summary {
   paper_id: number;
   ai_provider: string;
   ai_model: string;
+  input_source: string | null;        // 要約生成に使用したデータソース
+  input_source_label: string | null;  // データソースの日本語ラベル
   summary_text: string;
   purpose: string | null;
   methodology: string | null;
