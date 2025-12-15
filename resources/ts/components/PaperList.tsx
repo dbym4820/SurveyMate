@@ -352,7 +352,7 @@ export default function PaperList(): JSX.Element {
                             onChange={() => toggleJournal(journal.id)}
                             className="w-4 h-4 text-gray-600 rounded"
                           />
-                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${journal.color}`} />
+                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${journal.color || 'bg-gray-500'}`} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">{journal.name}</div>
                             <div className="text-xs text-gray-500">

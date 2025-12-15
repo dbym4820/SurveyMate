@@ -491,7 +491,7 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
       <div className="p-3 sm:p-5">
         <div className="flex items-start gap-2 sm:gap-4">
           {/* 色バー */}
-          <div className={`w-1 sm:w-1.5 self-stretch rounded-full ${paper.journal_color}`} />
+          <div className={`w-1 sm:w-1.5 self-stretch rounded-full ${paper.journal_color || 'bg-gray-500'}`} />
 
           {/* コンテンツ */}
           <div className="flex-1 min-w-0">
@@ -499,7 +499,7 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
             <div className="flex items-start justify-between gap-2 mb-2">
               {/* メタ情報（左側） */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 text-xs font-medium text-white rounded-lg ${paper.journal_color} leading-tight`}>
+                <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 text-xs font-medium text-white rounded-lg ${paper.journal_color || 'bg-gray-500'} leading-tight`}>
                   {paper.journal_name}
                 </span>
                 <span className="text-xs text-gray-500">

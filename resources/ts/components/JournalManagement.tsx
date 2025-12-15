@@ -174,7 +174,7 @@ export default function JournalManagement(): JSX.Element {
               >
                 <div className="flex items-start gap-4">
                   {/* 色バー */}
-                  <div className={`w-2 self-stretch rounded-full ${journal.color}`} />
+                  <div className={`w-2 self-stretch rounded-full ${journal.color || 'bg-gray-500'}`} />
 
                   {/* 情報 */}
                   <div className="flex-1 min-w-0">

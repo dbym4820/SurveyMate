@@ -549,10 +549,10 @@ export default function Trends(): JSX.Element {
                   {papers.map((paper) => (
                     <div key={paper.id} className="p-4 hover:bg-gray-50">
                       <div className="flex items-start gap-3">
-                        <div className={`w-1 self-stretch rounded-full ${paper.journal_color}`} />
+                        <div className={`w-1 self-stretch rounded-full ${paper.journal_color || 'bg-gray-500'}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className={`px-2 py-0.5 text-xs font-medium text-white rounded ${paper.journal_color}`}>
+                            <span className={`px-2 py-0.5 text-xs font-medium text-white rounded ${paper.journal_color || 'bg-gray-500'}`}>
                               {paper.journal_name}
                             </span>
                             {paper.published_date && (
