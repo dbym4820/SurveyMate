@@ -51,6 +51,14 @@ function arePropsEqual(prevProps: PaperCardProps, nextProps: PaperCardProps): bo
   );
 }
 
+// 論文のURLを取得（DOI優先）
+function getPaperUrl(paper: Paper): string {
+  if (paper.doi) {
+    return `https://doi.org/${paper.doi}`;
+  }
+  return paper.url || '#';
+}
+
 function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperCardProps): JSX.Element {
   const { showToast } = useToast();
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -774,7 +782,7 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
               )}
 
               <a
-                href={paper.url || '#'}
+                href={getPaperUrl(paper)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-600 transition-colors"
@@ -1221,7 +1229,7 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
                 ESCで閉じる
               </p>
               <a
-                href={paper.url || '#'}
+                href={getPaperUrl(paper)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800"

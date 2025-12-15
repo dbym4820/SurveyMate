@@ -334,67 +334,17 @@ class RssFetcherService
             return null;
         }
 
-        // Extract authors
-        $authors = [];
-        $itemAuthors = $item->get_authors();
-        if ($itemAuthors) {
-            foreach ($itemAuthors as $author) {
-                $name = $author->get_name();
-                if ($name) {
-                    $authors[] = $name;
-                }
-            }
-        }
+        // タイトルからHTMLタグを除去してクリーンアップ
+        $title = trim(strip_tags(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+
+        // Extract authors from multiple sources
+        $authors = $this->extractAuthors($item);
 
         // Extract DOI from various sources
-        $doi = null;
-        $link = $item->get_link();
+        $doi = $this->extractDoi($item);
 
-        // Try to extract DOI from link
-        if ($link && preg_match('/10\.\d{4,}\/[^\s]+/', $link, $matches)) {
-            $doi = $matches[0];
-        }
-
-        // Get abstract from description (preferred for academic papers)
-        // get_description() typically contains the paper abstract
-        // get_content() often contains journal boilerplate or full HTML
-        $abstract = null;
-        $description = $item->get_description();
-        $content = $item->get_content();
-
-        // Prefer description over content for academic RSS feeds
-        $rawAbstract = $description ?: $content;
-
-        if ($rawAbstract) {
-            // Strip HTML tags
-            $cleanAbstract = strip_tags($rawAbstract);
-            // Clean up whitespace
-            $cleanAbstract = preg_replace('/\s+/', ' ', trim($cleanAbstract));
-
-            // Filter out journal boilerplate/descriptions (common patterns)
-            $boilerplatePatterns = [
-                '/^The International Journal of/i',
-                '/^This journal publishes/i',
-                '/^Subscribe to/i',
-                '/^Access the full/i',
-                '/^Click here/i',
-                '/^Read the full/i',
-                '/publishes original research/i',
-            ];
-
-            $isBoilerplate = false;
-            foreach ($boilerplatePatterns as $pattern) {
-                if (preg_match($pattern, $cleanAbstract)) {
-                    $isBoilerplate = true;
-                    break;
-                }
-            }
-
-            // Only use abstract if it's not boilerplate and has meaningful length
-            if (!$isBoilerplate && strlen($cleanAbstract) > 50) {
-                $abstract = $cleanAbstract;
-            }
-        }
+        // Get abstract from multiple sources
+        $abstract = $this->extractAbstract($item);
 
         // Parse date
         $publishedDate = null;
@@ -402,6 +352,9 @@ class RssFetcherService
         if ($date) {
             $publishedDate = $date;
         }
+
+        // Get link
+        $link = $item->get_link();
 
         // External ID: prefer DOI, then GUID, then link
         $externalId = $doi ?? $item->get_id() ?? $link;
@@ -416,6 +369,223 @@ class RssFetcherService
             'doi' => $doi,
             'published_date' => $publishedDate,
         ];
+    }
+
+    /**
+     * 様々なソースから著者情報を抽出
+     */
+    private function extractAuthors($item): array
+    {
+        $authors = [];
+
+        // 1. SimplePieの標準メソッド（Atom author, RSS author）
+        $itemAuthors = $item->get_authors();
+        if ($itemAuthors) {
+            foreach ($itemAuthors as $author) {
+                $name = $author->get_name();
+                if ($name) {
+                    $authors[] = $this->cleanAuthorName($name);
+                }
+            }
+        }
+
+        // 2. Dublin Core: dc:creator
+        if (empty($authors)) {
+            $dcCreators = $item->get_item_tags('http://purl.org/dc/elements/1.1/', 'creator');
+            if ($dcCreators) {
+                foreach ($dcCreators as $creator) {
+                    if (!empty($creator['data'])) {
+                        $authors[] = $this->cleanAuthorName($creator['data']);
+                    }
+                }
+            }
+        }
+
+        // 3. Dublin Core Terms: dcterms:creator
+        if (empty($authors)) {
+            $dctermsCreators = $item->get_item_tags('http://purl.org/dc/terms/', 'creator');
+            if ($dctermsCreators) {
+                foreach ($dctermsCreators as $creator) {
+                    if (!empty($creator['data'])) {
+                        $authors[] = $this->cleanAuthorName($creator['data']);
+                    }
+                }
+            }
+        }
+
+        // 4. PRISM: prism:author
+        if (empty($authors)) {
+            $prismAuthors = $item->get_item_tags('http://prismstandard.org/namespaces/basic/2.0/', 'author');
+            if ($prismAuthors) {
+                foreach ($prismAuthors as $author) {
+                    if (!empty($author['data'])) {
+                        $authors[] = $this->cleanAuthorName($author['data']);
+                    }
+                }
+            }
+        }
+
+        return array_unique(array_filter($authors));
+    }
+
+    /**
+     * 著者名をクリーンアップ
+     */
+    private function cleanAuthorName(string $name): string
+    {
+        // HTMLタグを除去
+        $name = strip_tags($name);
+        // HTMLエンティティをデコード
+        $name = html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // 余分な空白を除去
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        return $name;
+    }
+
+    /**
+     * 様々なソースからDOIを抽出
+     */
+    private function extractDoi($item): ?string
+    {
+        $doi = null;
+        $link = $item->get_link();
+
+        // DOIの正規表現パターン
+        $doiPattern = '/\b(10\.\d{4,}\/[^\s<>"\']+)/';
+
+        // 1. リンクからDOIを抽出
+        if ($link && preg_match($doiPattern, $link, $matches)) {
+            $doi = $this->cleanDoi($matches[1]);
+        }
+
+        // 2. Dublin Core: dc:identifier
+        if (!$doi) {
+            $dcIdentifiers = $item->get_item_tags('http://purl.org/dc/elements/1.1/', 'identifier');
+            if ($dcIdentifiers) {
+                foreach ($dcIdentifiers as $identifier) {
+                    if (!empty($identifier['data']) && preg_match($doiPattern, $identifier['data'], $matches)) {
+                        $doi = $this->cleanDoi($matches[1]);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 3. PRISM: prism:doi
+        if (!$doi) {
+            $prismDoi = $item->get_item_tags('http://prismstandard.org/namespaces/basic/2.0/', 'doi');
+            if ($prismDoi && !empty($prismDoi[0]['data'])) {
+                $doi = $this->cleanDoi($prismDoi[0]['data']);
+            }
+        }
+
+        // 4. GUIDからDOIを抽出
+        if (!$doi) {
+            $guid = $item->get_id();
+            if ($guid && preg_match($doiPattern, $guid, $matches)) {
+                $doi = $this->cleanDoi($matches[1]);
+            }
+        }
+
+        // 5. description/contentからDOIを抽出
+        if (!$doi) {
+            $content = $item->get_description() ?: $item->get_content();
+            if ($content && preg_match($doiPattern, $content, $matches)) {
+                $doi = $this->cleanDoi($matches[1]);
+            }
+        }
+
+        return $doi;
+    }
+
+    /**
+     * DOIをクリーンアップ
+     */
+    private function cleanDoi(string $doi): string
+    {
+        // URLプレフィックスを除去
+        $doi = preg_replace('/^https?:\/\/(?:dx\.)?doi\.org\//', '', $doi);
+        // 末尾の不要な文字を除去
+        $doi = rtrim($doi, '.,;:)]\'"');
+        return $doi;
+    }
+
+    /**
+     * 様々なソースからアブストラクトを抽出
+     */
+    private function extractAbstract($item): ?string
+    {
+        $abstract = null;
+
+        // 1. Dublin Core: dc:description（最優先）
+        $dcDescription = $item->get_item_tags('http://purl.org/dc/elements/1.1/', 'description');
+        if ($dcDescription && !empty($dcDescription[0]['data'])) {
+            $abstract = $this->cleanAbstract($dcDescription[0]['data']);
+            if ($abstract) {
+                return $abstract;
+            }
+        }
+
+        // 2. Atom: summary
+        $atomSummary = $item->get_item_tags('http://www.w3.org/2005/Atom', 'summary');
+        if ($atomSummary && !empty($atomSummary[0]['data'])) {
+            $abstract = $this->cleanAbstract($atomSummary[0]['data']);
+            if ($abstract) {
+                return $abstract;
+            }
+        }
+
+        // 3. SimplePieの標準メソッド（description/content）
+        $description = $item->get_description();
+        $content = $item->get_content();
+
+        // descriptionを優先
+        $rawAbstract = $description ?: $content;
+
+        if ($rawAbstract) {
+            $abstract = $this->cleanAbstract($rawAbstract);
+        }
+
+        return $abstract;
+    }
+
+    /**
+     * アブストラクトをクリーンアップ
+     */
+    private function cleanAbstract(string $text): ?string
+    {
+        // HTMLタグを除去
+        $cleanAbstract = strip_tags($text);
+        // HTMLエンティティをデコード
+        $cleanAbstract = html_entity_decode($cleanAbstract, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // 余分な空白を除去
+        $cleanAbstract = preg_replace('/\s+/', ' ', trim($cleanAbstract));
+
+        // ジャーナルのボイラープレートを除外
+        $boilerplatePatterns = [
+            '/^The International Journal of/i',
+            '/^This journal publishes/i',
+            '/^Subscribe to/i',
+            '/^Access the full/i',
+            '/^Click here/i',
+            '/^Read the full/i',
+            '/publishes original research/i',
+            '/^No abstract available/i',
+            '/^Abstract not available/i',
+        ];
+
+        foreach ($boilerplatePatterns as $pattern) {
+            if (preg_match($pattern, $cleanAbstract)) {
+                return null;
+            }
+        }
+
+        // 意味のある長さがあるか確認
+        if (strlen($cleanAbstract) < 50) {
+            return null;
+        }
+
+        return $cleanAbstract;
     }
 
     /**
