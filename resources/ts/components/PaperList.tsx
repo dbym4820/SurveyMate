@@ -22,6 +22,8 @@ export default function PaperList(): JSX.Element {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState('all');
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
   const [showJournalFilter, setShowJournalFilter] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<Pagination>({ total: 0, limit: 0, offset: 0, hasMore: false });
@@ -130,12 +132,22 @@ export default function PaperList(): JSX.Element {
 
   // Calculate date range
   const getDateFrom = useCallback((): string | undefined => {
+    if (dateFilter === 'custom') {
+      return customDateFrom || undefined;
+    }
     const filter = DATE_FILTERS.find((f) => f.value === dateFilter);
     if (!filter?.days) return undefined;
     const date = new Date();
     date.setDate(date.getDate() - filter.days);
     return date.toISOString().split('T')[0];
-  }, [dateFilter]);
+  }, [dateFilter, customDateFrom]);
+
+  const getDateTo = useCallback((): string | undefined => {
+    if (dateFilter === 'custom') {
+      return customDateTo || undefined;
+    }
+    return undefined;
+  }, [dateFilter, customDateTo]);
 
   // Fetch papers
   const fetchPapers = useCallback(async (): Promise<Paper[]> => {
@@ -151,6 +163,7 @@ export default function PaperList(): JSX.Element {
         journals: selectedJournals,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         dateFrom: getDateFrom(),
+        dateTo: getDateTo(),
         limit: 100,
       });
       if (data.success) {
@@ -165,7 +178,7 @@ export default function PaperList(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [selectedJournals, selectedTags, getDateFrom]);
+  }, [selectedJournals, selectedTags, getDateFrom, getDateTo]);
 
   // PDF処理中の論文があれば5秒ごとにワーカー起動確認
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -266,7 +279,7 @@ export default function PaperList(): JSX.Element {
       }
     };
     loadAndCheckProcessing();
-  }, [selectedJournals, selectedTags, getDateFrom]);
+  }, [selectedJournals, selectedTags, getDateFrom, getDateTo]);
 
   // コンポーネントのアンマウント時にポーリングを停止
   useEffect(() => {
@@ -455,7 +468,7 @@ export default function PaperList(): JSX.Element {
             {/* Bottom row: date/AI selection (mobile: horizontal) */}
             <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
               {/* Date filter */}
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                 <Calendar className="w-4 h-4 text-gray-500" />
                 <select
                   value={dateFilter}
@@ -468,6 +481,27 @@ export default function PaperList(): JSX.Element {
                     </option>
                   ))}
                 </select>
+
+                {/* Custom date range inputs */}
+                {dateFilter === 'custom' && (
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <input
+                      type="date"
+                      value={customDateFrom}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setCustomDateFrom(e.target.value)}
+                      className="px-2 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                      placeholder="開始日"
+                    />
+                    <span className="text-gray-400 text-xs sm:text-sm">〜</span>
+                    <input
+                      type="date"
+                      value={customDateTo}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setCustomDateTo(e.target.value)}
+                      className="px-2 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                      placeholder="終了日"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Count display (desktop) */}

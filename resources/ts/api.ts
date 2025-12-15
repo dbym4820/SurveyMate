@@ -296,18 +296,28 @@ export const api = {
   trends: {
     stats: (): Promise<TrendStatsResponse> =>
       request('/trends/stats'),
-    papers: (period: string, tagIds?: number[]): Promise<TrendPapersResponse> => {
-      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+    papers: (period: string, tagIds?: number[], journalIds?: string[], dateFrom?: string, dateTo?: string): Promise<TrendPapersResponse> => {
+      const params = new URLSearchParams();
+      if (tagIds && tagIds.length > 0) params.set('tagIds', tagIds.join(','));
+      if (journalIds && journalIds.length > 0) params.set('journalIds', journalIds.join(','));
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      const query = params.toString() ? `?${params.toString()}` : '';
       return request(`/trends/${period}/papers${query}`);
     },
-    summary: (period: string, tagIds?: number[]): Promise<TrendSummaryResponse> => {
-      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+    summary: (period: string, tagIds?: number[], journalIds?: string[], dateFrom?: string, dateTo?: string): Promise<TrendSummaryResponse> => {
+      const params = new URLSearchParams();
+      if (tagIds && tagIds.length > 0) params.set('tagIds', tagIds.join(','));
+      if (journalIds && journalIds.length > 0) params.set('journalIds', journalIds.join(','));
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      const query = params.toString() ? `?${params.toString()}` : '';
       return request(`/trends/${period}/summary${query}`);
     },
-    generate: (period: string, provider?: string, tagIds?: number[]): Promise<TrendGenerateResponse> =>
+    generate: (period: string, provider?: string, tagIds?: number[], journalIds?: string[], dateFrom?: string, dateTo?: string): Promise<TrendGenerateResponse> =>
       request(`/trends/${period}/generate`, {
         method: 'POST',
-        body: JSON.stringify({ provider, tagIds }),
+        body: JSON.stringify({ provider, tagIds, journalIds, dateFrom, dateTo }),
       }),
     history: (limit?: number): Promise<TrendHistoryResponse> => {
       const query = limit ? `?limit=${limit}` : '';

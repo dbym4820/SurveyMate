@@ -12,6 +12,8 @@ use Smalot\PdfParser\Config as PdfConfig;
 class FullTextFetcherService
 {
     private const UNPAYWALL_API_URL = 'https://api.unpaywall.org/v2/';
+    private const CROSSREF_API_URL = 'https://api.crossref.org/works/';
+    private const DOI_RESOLVER_URL = 'https://doi.org/';
 
     private ?string $unpaywallEmail;
     private int $timeout;
@@ -61,26 +63,25 @@ class FullTextFetcherService
             ];
         }
 
-        // 1. Unpaywall APIでPDF URLを取得
-        $pdfUrl = $this->getPdfUrlFromUnpaywall($paper->doi);
-
-        if ($pdfUrl) {
-            // 2. PDFをダウンロードしてテキスト抽出（PDFも保存）
-            $result = $this->extractTextFromPdf($pdfUrl, $paper);
-            if ($result['success']) {
-                return [
-                    'success' => true,
-                    'source' => 'unpaywall_pdf',
-                    'text' => $this->truncateText($result['text']),
-                    'pdf_url' => $pdfUrl,
-                    'pdf_path' => $result['pdf_path'] ?? null,
-                    'error' => null,
-                ];
-            }
-            Log::warning("PDF extraction failed for DOI {$paper->doi}: {$result['error']}");
+        // 1. Unpaywall APIからすべてのOAロケーションを取得し，優先度順に試行
+        $unpaywallResult = $this->fetchFromUnpaywall($paper);
+        if ($unpaywallResult['success']) {
+            return $unpaywallResult;
         }
 
-        // 3. フォールバック: 論文URLからHTML本文抽出
+        // 2. DOI直接解決（doi.org経由）
+        $doiResult = $this->fetchFromDoiResolver($paper);
+        if ($doiResult['success']) {
+            return $doiResult;
+        }
+
+        // 3. CrossRef APIからリンクを取得
+        $crossrefResult = $this->fetchFromCrossRef($paper);
+        if ($crossrefResult['success']) {
+            return $crossrefResult;
+        }
+
+        // 4. フォールバック: 論文URLからHTML本文抽出
         if (!empty($paper->url)) {
             $result = $this->extractTextFromHtml($paper->url);
             if ($result['success']) {
@@ -107,49 +108,474 @@ class FullTextFetcherService
     }
 
     /**
-     * Unpaywall APIからPDF URLを取得
+     * Unpaywall APIからPDF/本文を取得（すべてのOAロケーションを優先度順に試行）
      */
-    private function getPdfUrlFromUnpaywall(string $doi): ?string
+    private function fetchFromUnpaywall(Paper $paper): array
     {
         if (empty($this->unpaywallEmail)) {
             Log::warning('Unpaywall email not configured');
-            return null;
+            return $this->failureResult('Unpaywall email not configured');
         }
 
         try {
-            // DOIをURLエンコード
-            $encodedDoi = urlencode($doi);
-            $url = self::UNPAYWALL_API_URL . $encodedDoi . '?email=' . urlencode($this->unpaywallEmail);
+            // DOIはパスの一部として使用するため，スラッシュはエンコードしない
+            // 他の特殊文字（スペース，#など）のみエンコード
+            $cleanDoi = trim($paper->doi);
+            $url = self::UNPAYWALL_API_URL . $cleanDoi . '?email=' . urlencode($this->unpaywallEmail);
 
-            $response = Http::timeout($this->timeout)->get($url);
+            Log::info("Unpaywall API request: {$url}");
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'User-Agent' => 'SurveyMate/1.0 (mailto:' . $this->unpaywallEmail . ')',
+                ])
+                ->get($url);
 
             if (!$response->successful()) {
-                Log::warning("Unpaywall API error for DOI {$doi}: " . $response->status());
-                return null;
+                Log::info("Unpaywall API: No data for DOI {$paper->doi} (HTTP {$response->status()})");
+                return $this->failureResult('Unpaywall API error: ' . $response->status());
             }
 
             $data = $response->json();
 
-            // best_oa_locationからPDF URLを取得
-            $bestLocation = $data['best_oa_location'] ?? null;
-            if ($bestLocation && !empty($bestLocation['url_for_pdf'])) {
-                return $bestLocation['url_for_pdf'];
+            // OAロケーションを優先度でソート
+            $locations = $this->sortOaLocations($data);
+
+            if (empty($locations)) {
+                Log::info("Unpaywall: No OA locations for DOI {$paper->doi}");
+                return $this->failureResult('No OA locations available');
             }
 
-            // oa_locationsから探す
-            $locations = $data['oa_locations'] ?? [];
+            Log::info("Unpaywall: Found " . count($locations) . " OA locations for DOI {$paper->doi}");
+
+            // 各ロケーションを順番に試行
             foreach ($locations as $location) {
-                if (!empty($location['url_for_pdf'])) {
-                    return $location['url_for_pdf'];
+                $result = $this->tryOaLocation($location, $paper);
+                if ($result['success']) {
+                    return $result;
+                }
+            }
+
+            return $this->failureResult('All Unpaywall locations failed');
+
+        } catch (\Exception $e) {
+            Log::error("Unpaywall API exception for DOI {$paper->doi}: " . $e->getMessage());
+            return $this->failureResult('Unpaywall exception: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * OAロケーションを優先度でソート
+     * 優先順位: publisher > repository > other
+     * 同じタイプ内では is_best を優先
+     */
+    private function sortOaLocations(array $data): array
+    {
+        $locations = [];
+
+        // best_oa_locationを最初に追加
+        if (!empty($data['best_oa_location'])) {
+            $best = $data['best_oa_location'];
+            $best['_is_best'] = true;
+            $locations[] = $best;
+        }
+
+        // oa_locationsからbestでないものを追加
+        $oaLocations = $data['oa_locations'] ?? [];
+        foreach ($oaLocations as $loc) {
+            // best_oa_locationと重複しないかチェック
+            $isDuplicate = false;
+            foreach ($locations as $existing) {
+                if (($existing['url_for_pdf'] ?? '') === ($loc['url_for_pdf'] ?? '') &&
+                    ($existing['url_for_landing_page'] ?? '') === ($loc['url_for_landing_page'] ?? '')) {
+                    $isDuplicate = true;
+                    break;
+                }
+            }
+            if (!$isDuplicate) {
+                $loc['_is_best'] = false;
+                $locations[] = $loc;
+            }
+        }
+
+        // 優先度でソート
+        usort($locations, function ($a, $b) {
+            // is_bestを優先
+            if (($a['_is_best'] ?? false) && !($b['_is_best'] ?? false)) return -1;
+            if (!($a['_is_best'] ?? false) && ($b['_is_best'] ?? false)) return 1;
+
+            // host_typeで優先度付け
+            $typePriority = ['publisher' => 0, 'repository' => 1];
+            $aType = $typePriority[$a['host_type'] ?? ''] ?? 2;
+            $bType = $typePriority[$b['host_type'] ?? ''] ?? 2;
+
+            if ($aType !== $bType) {
+                return $aType - $bType;
+            }
+
+            // PDF URLがあるものを優先
+            $aHasPdf = !empty($a['url_for_pdf']);
+            $bHasPdf = !empty($b['url_for_pdf']);
+            if ($aHasPdf && !$bHasPdf) return -1;
+            if (!$aHasPdf && $bHasPdf) return 1;
+
+            return 0;
+        });
+
+        return $locations;
+    }
+
+    /**
+     * 単一のOAロケーションからPDF/本文取得を試行
+     */
+    private function tryOaLocation(array $location, Paper $paper): array
+    {
+        $hostType = $location['host_type'] ?? 'unknown';
+        $pdfUrl = $location['url_for_pdf'] ?? null;
+        $landingUrl = $location['url_for_landing_page'] ?? null;
+
+        Log::info("Trying OA location: type={$hostType}, pdf=" . ($pdfUrl ? 'yes' : 'no') . ", landing=" . ($landingUrl ? 'yes' : 'no'));
+
+        // 1. PDF URLがあればPDFダウンロードを試行
+        if ($pdfUrl) {
+            $result = $this->extractTextFromPdf($pdfUrl, $paper);
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'source' => "unpaywall_{$hostType}_pdf",
+                    'text' => $this->truncateText($result['text'] ?? ''),
+                    'pdf_url' => $pdfUrl,
+                    'pdf_path' => $result['pdf_path'] ?? null,
+                    'error' => null,
+                ];
+            }
+            Log::info("PDF extraction failed for {$pdfUrl}: " . ($result['error'] ?? 'unknown'));
+        }
+
+        // 2. ランディングページからPDFリンクや本文を抽出
+        if ($landingUrl) {
+            // まずPDFリンクを探す
+            $pdfFromLanding = $this->findPdfLinkFromLandingPage($landingUrl);
+            if ($pdfFromLanding) {
+                Log::info("Found PDF link from landing page: {$pdfFromLanding}");
+                $result = $this->extractTextFromPdf($pdfFromLanding, $paper);
+                if ($result['success']) {
+                    return [
+                        'success' => true,
+                        'source' => "unpaywall_{$hostType}_landing_pdf",
+                        'text' => $this->truncateText($result['text'] ?? ''),
+                        'pdf_url' => $pdfFromLanding,
+                        'pdf_path' => $result['pdf_path'] ?? null,
+                        'error' => null,
+                    ];
+                }
+            }
+
+            // HTML本文抽出を試行
+            $htmlResult = $this->extractTextFromHtml($landingUrl);
+            if ($htmlResult['success']) {
+                return [
+                    'success' => true,
+                    'source' => "unpaywall_{$hostType}_html",
+                    'text' => $this->truncateText($htmlResult['text']),
+                    'pdf_url' => null,
+                    'pdf_path' => null,
+                    'error' => null,
+                ];
+            }
+        }
+
+        return $this->failureResult('OA location extraction failed');
+    }
+
+    /**
+     * ランディングページからPDFリンクを探す
+     */
+    private function findPdfLinkFromLandingPage(string $url): ?string
+    {
+        try {
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (compatible; SurveyMate/1.0; Academic Research)',
+                    'Accept' => 'text/html,application/xhtml+xml',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                return null;
+            }
+
+            $html = $response->body();
+            $baseUrl = $this->getBaseUrl($url);
+
+            // PDFリンクのパターンを探す
+            $patterns = [
+                // 直接的なPDFリンク
+                '/<a[^>]+href=["\']([^"\']*\.pdf(?:\?[^"\']*)?)["\'][^>]*>/i',
+                // data-pdf-url属性
+                '/<[^>]+data-pdf-url=["\']([^"\']+)["\'][^>]*>/i',
+                // PDF downloadリンク
+                '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>\s*(?:Download\s+)?PDF/i',
+                '/<a[^>]+href=["\']([^"\']+)["\'][^>]*class="[^"]*pdf[^"]*"[^>]*>/i',
+                // content-urlメタタグ
+                '/<meta[^>]+name=["\']citation_pdf_url["\'][^>]+content=["\']([^"\']+)["\'][^>]*>/i',
+                // リンクタグ
+                '/<link[^>]+rel=["\']alternate["\'][^>]+type=["\']application\/pdf["\'][^>]+href=["\']([^"\']+)["\'][^>]*>/i',
+            ];
+
+            foreach ($patterns as $pattern) {
+                if (preg_match_all($pattern, $html, $matches)) {
+                    foreach ($matches[1] as $match) {
+                        $pdfUrl = $this->resolveUrl($match, $baseUrl);
+                        // PDFかどうか簡易チェック
+                        if ($this->isPotentialPdfUrl($pdfUrl)) {
+                            return $pdfUrl;
+                        }
+                    }
                 }
             }
 
             return null;
 
         } catch (\Exception $e) {
-            Log::error("Unpaywall API exception for DOI {$doi}: " . $e->getMessage());
+            Log::warning("Failed to find PDF link from {$url}: " . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * URLがPDFの可能性があるかチェック
+     */
+    private function isPotentialPdfUrl(string $url): bool
+    {
+        $lower = strtolower($url);
+        return str_contains($lower, '.pdf') ||
+               str_contains($lower, '/pdf/') ||
+               str_contains($lower, 'pdf?') ||
+               str_contains($lower, 'type=pdf') ||
+               str_contains($lower, 'format=pdf');
+    }
+
+    /**
+     * DOI直接解決でリダイレクト先からPDF/本文取得
+     */
+    private function fetchFromDoiResolver(Paper $paper): array
+    {
+        try {
+            $doiUrl = self::DOI_RESOLVER_URL . $paper->doi;
+
+            // リダイレクトを追跡して最終URLを取得
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (compatible; SurveyMate/1.0; Academic Research)',
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml',
+                ])
+                ->withOptions(['allow_redirects' => ['track_redirects' => true]])
+                ->get($doiUrl);
+
+            if (!$response->successful()) {
+                return $this->failureResult('DOI resolver failed: ' . $response->status());
+            }
+
+            // 最終的なURLを取得
+            $finalUrl = $response->effectiveUri()?->__toString() ?? $doiUrl;
+            Log::info("DOI {$paper->doi} resolved to: {$finalUrl}");
+
+            // 最終ページからPDFリンクを探す
+            $pdfUrl = $this->findPdfLinkFromLandingPage($finalUrl);
+            if ($pdfUrl) {
+                $result = $this->extractTextFromPdf($pdfUrl, $paper);
+                if ($result['success']) {
+                    return [
+                        'success' => true,
+                        'source' => 'doi_resolver_pdf',
+                        'text' => $this->truncateText($result['text'] ?? ''),
+                        'pdf_url' => $pdfUrl,
+                        'pdf_path' => $result['pdf_path'] ?? null,
+                        'error' => null,
+                    ];
+                }
+            }
+
+            // HTML本文抽出を試行
+            $htmlResult = $this->extractTextFromHtml($finalUrl);
+            if ($htmlResult['success']) {
+                return [
+                    'success' => true,
+                    'source' => 'doi_resolver_html',
+                    'text' => $this->truncateText($htmlResult['text']),
+                    'pdf_url' => null,
+                    'pdf_path' => null,
+                    'error' => null,
+                ];
+            }
+
+            return $this->failureResult('DOI resolver: no content extracted');
+
+        } catch (\Exception $e) {
+            Log::warning("DOI resolver exception for {$paper->doi}: " . $e->getMessage());
+            return $this->failureResult('DOI resolver exception: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * CrossRef APIからリンクを取得
+     */
+    private function fetchFromCrossRef(Paper $paper): array
+    {
+        try {
+            // DOIはパスの一部として使用するため，スラッシュはエンコードしない
+            $cleanDoi = trim($paper->doi);
+            $url = self::CROSSREF_API_URL . $cleanDoi;
+
+            Log::info("CrossRef API request: {$url}");
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'User-Agent' => 'SurveyMate/1.0 (mailto:' . ($this->unpaywallEmail ?? 'research@example.com') . ')',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                return $this->failureResult('CrossRef API error: ' . $response->status());
+            }
+
+            $data = $response->json();
+            $message = $data['message'] ?? [];
+
+            // リンクを収集
+            $links = [];
+
+            // link配列から
+            foreach ($message['link'] ?? [] as $link) {
+                if (!empty($link['URL'])) {
+                    $links[] = [
+                        'url' => $link['URL'],
+                        'content_type' => $link['content-type'] ?? '',
+                        'intended_application' => $link['intended-application'] ?? '',
+                    ];
+                }
+            }
+
+            // resourceから
+            if (!empty($message['resource']['primary']['URL'])) {
+                $links[] = [
+                    'url' => $message['resource']['primary']['URL'],
+                    'content_type' => '',
+                    'intended_application' => 'primary',
+                ];
+            }
+
+            if (empty($links)) {
+                return $this->failureResult('CrossRef: no links found');
+            }
+
+            Log::info("CrossRef: Found " . count($links) . " links for DOI {$paper->doi}");
+
+            // PDFリンクを優先
+            usort($links, function ($a, $b) {
+                $aIsPdf = str_contains($a['content_type'], 'pdf') || str_contains($a['url'], '.pdf');
+                $bIsPdf = str_contains($b['content_type'], 'pdf') || str_contains($b['url'], '.pdf');
+                if ($aIsPdf && !$bIsPdf) return -1;
+                if (!$aIsPdf && $bIsPdf) return 1;
+                return 0;
+            });
+
+            foreach ($links as $link) {
+                $linkUrl = $link['url'];
+                $isPdf = str_contains($link['content_type'], 'pdf') || $this->isPotentialPdfUrl($linkUrl);
+
+                if ($isPdf) {
+                    $result = $this->extractTextFromPdf($linkUrl, $paper);
+                    if ($result['success']) {
+                        return [
+                            'success' => true,
+                            'source' => 'crossref_pdf',
+                            'text' => $this->truncateText($result['text'] ?? ''),
+                            'pdf_url' => $linkUrl,
+                            'pdf_path' => $result['pdf_path'] ?? null,
+                            'error' => null,
+                        ];
+                    }
+                }
+
+                // ランディングページとして処理
+                $pdfFromLanding = $this->findPdfLinkFromLandingPage($linkUrl);
+                if ($pdfFromLanding) {
+                    $result = $this->extractTextFromPdf($pdfFromLanding, $paper);
+                    if ($result['success']) {
+                        return [
+                            'success' => true,
+                            'source' => 'crossref_landing_pdf',
+                            'text' => $this->truncateText($result['text'] ?? ''),
+                            'pdf_url' => $pdfFromLanding,
+                            'pdf_path' => $result['pdf_path'] ?? null,
+                            'error' => null,
+                        ];
+                    }
+                }
+
+                // HTML抽出
+                $htmlResult = $this->extractTextFromHtml($linkUrl);
+                if ($htmlResult['success']) {
+                    return [
+                        'success' => true,
+                        'source' => 'crossref_html',
+                        'text' => $this->truncateText($htmlResult['text']),
+                        'pdf_url' => null,
+                        'pdf_path' => null,
+                        'error' => null,
+                    ];
+                }
+            }
+
+            return $this->failureResult('CrossRef: all links failed');
+
+        } catch (\Exception $e) {
+            Log::warning("CrossRef API exception for {$paper->doi}: " . $e->getMessage());
+            return $this->failureResult('CrossRef exception: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 失敗結果を生成
+     */
+    private function failureResult(string $error): array
+    {
+        return [
+            'success' => false,
+            'source' => null,
+            'text' => null,
+            'pdf_url' => null,
+            'pdf_path' => null,
+            'error' => $error,
+        ];
+    }
+
+    /**
+     * URLのベース部分を取得
+     */
+    private function getBaseUrl(string $url): string
+    {
+        $parsed = parse_url($url);
+        return ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '');
+    }
+
+    /**
+     * 相対URLを絶対URLに解決
+     */
+    private function resolveUrl(string $url, string $baseUrl): string
+    {
+        if (preg_match('/^https?:\/\//i', $url)) {
+            return $url;
+        }
+        if (str_starts_with($url, '//')) {
+            return 'https:' . $url;
+        }
+        if (str_starts_with($url, '/')) {
+            return $baseUrl . $url;
+        }
+        return $baseUrl . '/' . $url;
     }
 
     /**
@@ -479,7 +905,8 @@ class FullTextFetcherService
         // 学術論文で一般的な本文セクションを探す
         $patterns = [
             '/<article[^>]*>(.*?)<\/article>/is',
-            '/<div[^>]*class="[^"]*(?:article-body|full-text|paper-content|main-content|c-article-body)[^"]*"[^>]*>(.*?)<\/div>/is',
+            '/<div[^>]*class="[^"]*(?:article-body|full-text|paper-content|main-content|c-article-body|article__body|fulltext)[^"]*"[^>]*>(.*?)<\/div>/is',
+            '/<section[^>]*class="[^"]*(?:article-section|body|content)[^"]*"[^>]*>(.*?)<\/section>/is',
             '/<main[^>]*>(.*?)<\/main>/is',
         ];
 

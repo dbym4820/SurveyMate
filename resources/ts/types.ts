@@ -405,6 +405,7 @@ export interface TrendSummary {
   dateTo: string | null;
   paperCount: number;
   tagIds: number[];
+  journalIds: string[];
   provider: string;
   model: string | null;
   createdAt: string | null;
@@ -438,6 +439,8 @@ export interface TrendPapersResponse {
     journal_color: string;
   }>;
   count: number;
+  tagIds?: number[];
+  journalIds?: string[];
 }
 
 export interface TrendSummaryResponse {
@@ -452,6 +455,7 @@ export interface TrendSummaryResponse {
   model?: string;
   paperCount?: number;
   tagIds?: number[];
+  journalIds?: string[];
   summary: TrendSummary | null;
 }
 
@@ -465,6 +469,7 @@ export interface TrendGenerateResponse {
   paperCount: number;
   provider: string;
   tagIds: number[];
+  journalIds: string[];
   summary: {
     overview?: string;
     keyTopics?: Array<{

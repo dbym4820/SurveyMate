@@ -7,6 +7,9 @@ use App\Services\AiSummaryService;
 use App\Services\AiRssGeneratorService;
 use App\Services\RssFetcherService;
 use App\Services\FullTextFetcherService;
+use App\Services\MetadataExtraction\PatternMatcher;
+use App\Services\MetadataExtraction\PatternDetector;
+use App\Services\MetadataExtraction\MetadataExtractorService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,10 +32,29 @@ class AppServiceProvider extends ServiceProvider
             return new AiRssGeneratorService();
         });
 
+        // メタデータ抽出サービス
+        $this->app->singleton(PatternMatcher::class, function ($app) {
+            return new PatternMatcher();
+        });
+
+        $this->app->singleton(PatternDetector::class, function ($app) {
+            return new PatternDetector(
+                $app->make(PatternMatcher::class)
+            );
+        });
+
+        $this->app->singleton(MetadataExtractorService::class, function ($app) {
+            return new MetadataExtractorService(
+                $app->make(PatternDetector::class),
+                $app->make(PatternMatcher::class)
+            );
+        });
+
         $this->app->singleton(RssFetcherService::class, function ($app) {
             return new RssFetcherService(
                 $app->make(FullTextFetcherService::class),
-                $app->make(AiRssGeneratorService::class)
+                $app->make(AiRssGeneratorService::class),
+                $app->make(MetadataExtractorService::class)
             );
         });
     }

@@ -127,4 +127,66 @@ class Journal extends Model
     {
         return $query->where('user_id', $userId);
     }
+
+    /**
+     * Get summary parsing configuration
+     */
+    public function getSummaryParsingConfig(): ?array
+    {
+        $config = $this->rss_extraction_config;
+
+        if (!$config || !isset($config['summary_parsing'])) {
+            return null;
+        }
+
+        return $config['summary_parsing'];
+    }
+
+    /**
+     * Check if journal has summary parsing patterns
+     */
+    public function hasSummaryParsingPatterns(): bool
+    {
+        $config = $this->getSummaryParsingConfig();
+
+        if (!$config) {
+            return false;
+        }
+
+        // enabledフラグまたはパターンの存在を確認
+        if (isset($config['enabled']) && !$config['enabled']) {
+            return false;
+        }
+
+        return !empty($config['patterns']) || !empty($config['detected_format']);
+    }
+
+    /**
+     * Update summary parsing configuration
+     */
+    public function updateSummaryParsingConfig(array $summaryConfig): void
+    {
+        $config = $this->rss_extraction_config ?? [];
+        $config['summary_parsing'] = $summaryConfig;
+
+        $this->update([
+            'rss_extraction_config' => $config,
+        ]);
+    }
+
+    /**
+     * Clear summary parsing configuration
+     */
+    public function clearSummaryParsingConfig(): void
+    {
+        $config = $this->rss_extraction_config ?? [];
+
+        if (isset($config['summary_parsing'])) {
+            unset($config['summary_parsing']);
+        }
+
+        $this->update([
+            'rss_extraction_config' => $config ?: null,
+        ]);
+    }
 }

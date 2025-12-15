@@ -27,6 +27,7 @@ export const DATE_FILTERS: DateFilter[] = [
   { value: 'month', label: '過去30日', days: 30 },
   { value: 'quarter', label: '過去90日', days: 90 },
   { value: 'all', label: 'すべて', days: null },
+  { value: 'custom', label: '期間指定', days: null },
 ];
 
 export const RSS_URL_EXAMPLES: RssUrlExample[] = [

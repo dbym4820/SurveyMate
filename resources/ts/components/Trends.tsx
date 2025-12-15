@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp, Calendar, FileText, Sparkles, Loader2,
   ChevronDown, ChevronUp, Clock, Target, Lightbulb,
-  Tag, History, Check, X
+  Tag, History, Check, X, BookOpen
 } from 'lucide-react';
 import api from '../api';
-import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType } from '../types';
+import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType, Journal } from '../types';
 
 interface TrendStats {
   [period: string]: {
@@ -39,13 +39,14 @@ interface PeriodPaper {
   journal_color: string;
 }
 
-type Period = 'day' | 'week' | 'month' | 'halfyear';
+type Period = 'day' | 'week' | 'month' | 'halfyear' | 'custom';
 
 const PERIODS: { id: Period; label: string; description: string }[] = [
   { id: 'day', label: '今日', description: '本日の論文' },
   { id: 'week', label: '今週', description: '過去7日間' },
   { id: 'month', label: '今月', description: '過去30日間' },
   { id: 'halfyear', label: '半年', description: '過去6ヶ月' },
+  { id: 'custom', label: 'カスタム', description: '日付を指定' },
 ];
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ const PERIOD_LABELS: Record<string, string> = {
   week: '今週',
   month: '今月',
   halfyear: '半年',
+  custom: 'カスタム',
 };
 
 export default function Trends(): JSX.Element {
@@ -76,6 +78,14 @@ export default function Trends(): JSX.Element {
   const [showTagSelector, setShowTagSelector] = useState(false);
   const tagSelectorRef = useRef<HTMLDivElement>(null);
 
+  // 論文誌関連
+  const [journals, setJournals] = useState<Journal[]>([]);
+  const [selectedJournalIds, setSelectedJournalIds] = useState<string[]>([]);
+
+  // カスタム日付範囲
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
+
   // 履歴関連
   const [trendHistory, setTrendHistory] = useState<TrendSummaryType[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -86,6 +96,7 @@ export default function Trends(): JSX.Element {
     fetchStats();
     fetchSettings();
     fetchTags();
+    fetchJournals();
   }, []);
 
   const fetchSettings = async () => {
@@ -103,6 +114,15 @@ export default function Trends(): JSX.Element {
       setTags(data.tags || []);
     } catch (err) {
       console.error('Failed to fetch tags:', err);
+    }
+  };
+
+  const fetchJournals = async () => {
+    try {
+      const data = await api.journals.list();
+      setJournals(data.journals || []);
+    } catch (err) {
+      console.error('Failed to fetch journals:', err);
     }
   };
 
@@ -133,11 +153,17 @@ export default function Trends(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (selectedPeriod) {
+    // カスタム期間の場合は両方の日付が設定されている必要がある
+    if (selectedPeriod === 'custom') {
+      if (customDateFrom && customDateTo) {
+        fetchPapers(selectedPeriod);
+        fetchSummary(selectedPeriod);
+      }
+    } else if (selectedPeriod) {
       fetchPapers(selectedPeriod);
       fetchSummary(selectedPeriod);
     }
-  }, [selectedPeriod, selectedTagIds]);
+  }, [selectedPeriod, selectedTagIds, selectedJournalIds, customDateFrom, customDateTo]);
 
   const fetchStats = async () => {
     try {
@@ -156,7 +182,13 @@ export default function Trends(): JSX.Element {
   const fetchPapers = async (period: Period) => {
     try {
       setIsLoadingPapers(true);
-      const data = await api.trends.papers(period, selectedTagIds.length > 0 ? selectedTagIds : undefined);
+      const data = await api.trends.papers(
+        period,
+        selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        selectedJournalIds.length > 0 ? selectedJournalIds : undefined,
+        period === 'custom' ? customDateFrom : undefined,
+        period === 'custom' ? customDateTo : undefined
+      );
       if (data.success) {
         setPapers(data.papers);
       }
@@ -169,7 +201,13 @@ export default function Trends(): JSX.Element {
 
   const fetchSummary = async (period: Period) => {
     try {
-      const data = await api.trends.summary(period, selectedTagIds.length > 0 ? selectedTagIds : undefined);
+      const data = await api.trends.summary(
+        period,
+        selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        selectedJournalIds.length > 0 ? selectedJournalIds : undefined,
+        period === 'custom' ? customDateFrom : undefined,
+        period === 'custom' ? customDateTo : undefined
+      );
       if (data.success && data.summary) {
         setSummary({
           overview: data.summary.overview || null,
@@ -193,13 +231,22 @@ export default function Trends(): JSX.Element {
       return;
     }
 
+    // カスタム期間の場合は日付が必要
+    if (selectedPeriod === 'custom' && (!customDateFrom || !customDateTo)) {
+      setError('開始日と終了日を指定してください');
+      return;
+    }
+
     try {
       setIsGenerating(true);
       setError(null);
       const data = await api.trends.generate(
         selectedPeriod,
         undefined,
-        selectedTagIds.length > 0 ? selectedTagIds : undefined
+        selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        selectedJournalIds.length > 0 ? selectedJournalIds : undefined,
+        selectedPeriod === 'custom' ? customDateFrom : undefined,
+        selectedPeriod === 'custom' ? customDateTo : undefined
       );
       if (data.success && data.summary) {
         setSummary({
@@ -234,6 +281,20 @@ export default function Trends(): JSX.Element {
     setSummary(null);
   };
 
+  const toggleJournal = (journalId: string) => {
+    setSelectedJournalIds(prev =>
+      prev.includes(journalId)
+        ? prev.filter(id => id !== journalId)
+        : [...prev, journalId]
+    );
+    setSummary(null); // 論文誌変更時に要約をリセット
+  };
+
+  const clearJournals = () => {
+    setSelectedJournalIds([]);
+    setSummary(null);
+  };
+
   const openHistory = async () => {
     setShowHistory(true);
     await fetchHistory();
@@ -261,10 +322,11 @@ export default function Trends(): JSX.Element {
         </div>
 
         {/* Period Selection */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           {PERIODS.map((period) => {
             const periodStats = stats?.[period.id];
             const isSelected = selectedPeriod === period.id;
+            const isCustom = period.id === 'custom';
             return (
               <button
                 key={period.id}
@@ -282,7 +344,13 @@ export default function Trends(): JSX.Element {
                   </span>
                 </div>
                 <p className="text-sm text-gray-500 mb-2">{period.description}</p>
-                {isLoadingStats ? (
+                {isCustom ? (
+                  <p className={`text-sm ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {customDateFrom && customDateTo
+                      ? `${papers.length}件`
+                      : '下で日付を選択'}
+                  </p>
+                ) : isLoadingStats ? (
                   <div className="h-6 bg-gray-200 rounded animate-pulse" />
                 ) : (
                   <p className={`text-2xl font-bold ${isSelected ? 'text-gray-600' : 'text-gray-900'}`}>
@@ -295,8 +363,43 @@ export default function Trends(): JSX.Element {
           })}
         </div>
 
+        {/* Custom Date Range Picker */}
+        {selectedPeriod === 'custom' && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">日付範囲を指定</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">開始日:</label>
+                <input
+                  type="date"
+                  value={customDateFrom}
+                  onChange={(e) => setCustomDateFrom(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">終了日:</label>
+                <input
+                  type="date"
+                  value={customDateTo}
+                  onChange={(e) => setCustomDateTo(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+            </div>
+            {customDateFrom && customDateTo && (
+              <p className="text-sm text-gray-500 mt-3">
+                {customDateFrom} 〜 {customDateTo} の論文を対象
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Date Range Display */}
-        {currentStats && (
+        {selectedPeriod !== 'custom' && currentStats && (
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
             <Clock className="w-4 h-4" />
             <span>
@@ -352,6 +455,52 @@ export default function Trends(): JSX.Element {
           </div>
         )}
 
+        {/* Journal Filter */}
+        {journals.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <BookOpen className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">論文誌でフィルタ</span>
+              {selectedJournalIds.length > 0 && (
+                <button
+                  onClick={clearJournals}
+                  className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  クリア
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {journals.filter(j => j.is_active).map(journal => {
+                const isSelected = selectedJournalIds.includes(journal.id);
+                return (
+                  <button
+                    key={journal.id}
+                    onClick={() => toggleJournal(journal.id)}
+                    className={`px-3 py-1.5 text-sm rounded-full border transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-gray-100 border-gray-400 text-gray-800'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${journal.color}`}
+                    />
+                    {journal.name}
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedJournalIds.length > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                選択した論文誌の論文のみを対象にトレンド要約を生成します
+              </p>
+            )}
+          </div>
+        )}
+
         {/* AI Trend Summary */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
           <div className="p-6 border-b border-gray-200">
@@ -363,7 +512,9 @@ export default function Trends(): JSX.Element {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">AIトレンド要約</h2>
                   <p className="text-sm text-gray-500">
-                    {PERIODS.find(p => p.id === selectedPeriod)?.label}の論文傾向
+                    {selectedPeriod === 'custom' && customDateFrom && customDateTo
+                      ? `${customDateFrom} 〜 ${customDateTo} の論文傾向`
+                      : `${PERIODS.find(p => p.id === selectedPeriod)?.label}の論文傾向`}
                   </p>
                 </div>
               </div>
@@ -564,9 +715,13 @@ export default function Trends(): JSX.Element {
                           <h4 className="font-medium text-gray-900 line-clamp-2">
                             {paper.title}
                           </h4>
-                          {paper.authors && paper.authors.length > 0 && (
+                          {paper.authors && (typeof paper.authors === 'string' ? paper.authors : Object.keys(paper.authors).length > 0) && (
                             <p className="text-sm text-gray-500 mt-1 truncate">
-                              {Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors}
+                              {Array.isArray(paper.authors)
+                                ? paper.authors.join(', ')
+                                : typeof paper.authors === 'object'
+                                ? Object.values(paper.authors).join(', ')
+                                : paper.authors}
                             </p>
                           )}
                         </div>
@@ -645,6 +800,23 @@ export default function Trends(): JSX.Element {
                                     style={{ backgroundColor: tag.color }}
                                   />
                                   {tag.name}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {item.journalIds && item.journalIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {item.journalIds.map(journalId => {
+                              const journal = journals.find(j => j.id === journalId);
+                              if (!journal) return null;
+                              return (
+                                <span
+                                  key={journalId}
+                                  className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 flex items-center gap-1"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  {journal.name}
                                 </span>
                               );
                             })}

@@ -215,7 +215,16 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
     return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  const authors = Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors;
+  // authors がオブジェクト形式（{0: "A", 2: "B"}）の場合もあるため，Object.values で変換
+  const authors = (() => {
+    if (Array.isArray(paper.authors)) {
+      return paper.authors.join(', ');
+    }
+    if (typeof paper.authors === 'object' && paper.authors !== null) {
+      return Object.values(paper.authors).join(', ');
+    }
+    return paper.authors ?? '';
+  })();
 
   // タグ追加
   const handleAddTag = async (): Promise<void> => {

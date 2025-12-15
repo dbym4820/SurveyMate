@@ -397,7 +397,7 @@ PROMPT;
                     ? trim($authorsNode->textContent)
                     : trim($authorsNode->getAttribute($attr));
                 // Split authors by common delimiters
-                $paper['authors'] = array_filter(array_map('trim', preg_split('/[,;，、]/', $authorsText)));
+                $paper['authors'] = array_values(array_filter(array_map('trim', preg_split('/[,;，、]/', $authorsText))));
             }
         }
 

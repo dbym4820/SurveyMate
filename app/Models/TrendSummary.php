@@ -21,6 +21,7 @@ class TrendSummary extends Model
         'recommendations',
         'paper_count',
         'tag_ids',
+        'journal_ids',
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class TrendSummary extends Model
         'journal_insights' => 'array',
         'recommendations' => 'array',
         'tag_ids' => 'array',
+        'journal_ids' => 'array',
     ];
 
     /**
@@ -47,14 +49,16 @@ class TrendSummary extends Model
      * @param int $userId
      * @param string $period
      * @param array|null $tagIds
+     * @param array|null $journalIds
      * @return TrendSummary|null
      */
-    public static function findLatestForUser(int $userId, string $period, ?array $tagIds = null)
+    public static function findLatestForUser(int $userId, string $period, ?array $tagIds = null, ?array $journalIds = null)
     {
         $query = self::where('user_id', $userId)
             ->where('period', $period)
             ->orderBy('created_at', 'desc');
 
+        // タグでフィルタ
         if ($tagIds !== null && count($tagIds) > 0) {
             // JSONカラムで完全一致検索
             $query->whereJsonContains('tag_ids', $tagIds);
@@ -62,6 +66,16 @@ class TrendSummary extends Model
             $query->where(function ($q) {
                 $q->whereNull('tag_ids')
                   ->orWhere('tag_ids', '[]');
+            });
+        }
+
+        // 論文誌でフィルタ
+        if ($journalIds !== null && count($journalIds) > 0) {
+            $query->whereJsonContains('journal_ids', $journalIds);
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('journal_ids')
+                  ->orWhere('journal_ids', '[]');
             });
         }
 
@@ -122,6 +136,7 @@ class TrendSummary extends Model
             'recommendations' => $data['recommendations'] ?? null,
             'paper_count' => $data['paper_count'] ?? 0,
             'tag_ids' => $data['tag_ids'] ?? null,
+            'journal_ids' => $data['journal_ids'] ?? null,
         ]);
     }
 
@@ -144,6 +159,7 @@ class TrendSummary extends Model
             'dateTo' => $this->date_to?->format('Y-m-d'),
             'paperCount' => $this->paper_count,
             'tagIds' => $this->tag_ids ?? [],
+            'journalIds' => $this->journal_ids ?? [],
             'provider' => $this->ai_provider,
             'model' => $this->ai_model,
             'createdAt' => $this->created_at?->toISOString(),

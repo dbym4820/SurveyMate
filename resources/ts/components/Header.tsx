@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag, Compass, Home, Bot
+  Settings as SettingsIcon, User as UserIcon, LogOut, Key, TrendingUp, RefreshCw, Menu, X, ChevronDown, Tag, Compass, FileText, Bot
 } from 'lucide-react';
 import { getBasePath } from '../api';
 import type { User } from '../types';
@@ -58,15 +58,15 @@ export default function Header({
           <div className="hidden md:flex items-center gap-1 lg:gap-3">
             <button
               onClick={() => onNavigate('papers')}
-              title="Home"
+              title="論文一覧"
               className={`flex items-center gap-2 px-3 lg:px-4 py-2 border rounded-lg transition-colors ${
                 currentPage === 'papers'
                   ? 'border-gray-500 bg-gray-50 text-gray-700'
                   : 'border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <Home className="w-4 h-4" />
-              <span className="hidden lg:inline">Home</span>
+              <FileText className="w-4 h-4" />
+              <span className="hidden lg:inline">論文一覧</span>
             </button>
 
             {user.hasAnyApiKey && (
@@ -232,8 +232,8 @@ export default function Header({
                     : 'hover:bg-gray-50'
                 }`}
               >
-                <Home className="w-5 h-5" />
-                Home
+                <FileText className="w-5 h-5" />
+                論文一覧
               </button>
 
               {user.hasAnyApiKey && (

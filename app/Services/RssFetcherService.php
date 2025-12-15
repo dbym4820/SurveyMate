@@ -8,6 +8,7 @@ use App\Models\FetchLog;
 use App\Models\GeneratedFeed;
 use App\Jobs\ProcessPaperFullTextJob;
 use App\Services\QueueRunnerService;
+use App\Services\MetadataExtraction\MetadataExtractorService;
 use Illuminate\Support\Facades\Log;
 use SimplePie\SimplePie;
 
@@ -21,12 +22,17 @@ class RssFetcherService
 
     private FullTextFetcherService $fullTextFetcher;
     private AiRssGeneratorService $aiRssGenerator;
+    private MetadataExtractorService $metadataExtractor;
     private bool $fullTextEnabled;
 
-    public function __construct(FullTextFetcherService $fullTextFetcher, AiRssGeneratorService $aiRssGenerator)
-    {
+    public function __construct(
+        FullTextFetcherService $fullTextFetcher,
+        AiRssGeneratorService $aiRssGenerator,
+        MetadataExtractorService $metadataExtractor
+    ) {
         $this->fullTextFetcher = $fullTextFetcher;
         $this->aiRssGenerator = $aiRssGenerator;
+        $this->metadataExtractor = $metadataExtractor;
         $this->fullTextEnabled = config('surveymate.full_text.enabled', true);
     }
 
@@ -128,6 +134,14 @@ class RssFetcherService
             if ($useExtractionRules) {
                 // 抽出ルールがある場合は生XMLも取得
                 $rawXml = $this->fetchRawXml($journal->rss_url);
+            }
+
+            // Summary/Descriptionパターンが未検出の場合，初回解析を実行
+            if (!$journal->hasSummaryParsingPatterns() && count($items) > 0) {
+                $sampleItems = array_slice($items, 0, 5);
+                $this->metadataExtractor->analyzeAndStorePatterns($journal, $sampleItems);
+                // 解析後にJournalをリフレッシュ
+                $journal->refresh();
             }
 
             foreach ($items as $index => $item) {
@@ -359,31 +373,73 @@ class RssFetcherService
     private function parseFeedItem($item, Journal $journal): ?array
     {
         $title = $item->get_title();
+        $description = $item->get_description();
+
+        // 汎用メタデータ抽出を試行
+        $extractedData = $this->metadataExtractor->extractFromDescription($description, $journal);
+        $hasExtractedData = !empty($extractedData);
+
+        if ($hasExtractedData) {
+            Log::debug("Extracted metadata from description", [
+                'journal_id' => $journal->id,
+                'fields' => array_keys($extractedData),
+            ]);
+        }
+
+        // タイトルの取得（抽出データがあればそちらを優先）
+        if ($hasExtractedData && !empty($extractedData['title'])) {
+            $title = $extractedData['title'];
+        } elseif ($title) {
+            // タイトルからHTMLタグを除去してクリーンアップ
+            $title = trim(strip_tags(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        }
+
         if (!$title) {
             return null;
         }
 
-        // タイトルからHTMLタグを除去してクリーンアップ
-        $title = trim(strip_tags(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+        // 著者の取得（抽出データがあればそちらを優先）
+        $authors = [];
+        if ($hasExtractedData && !empty($extractedData['authors'])) {
+            $authors = is_array($extractedData['authors']) ? $extractedData['authors'] : [$extractedData['authors']];
+        } else {
+            $authors = $this->extractAuthors($item);
+        }
 
-        // Extract authors from multiple sources
-        $authors = $this->extractAuthors($item);
+        // DOIの取得（抽出データがあればそちらを優先）
+        $doi = null;
+        if ($hasExtractedData && !empty($extractedData['doi'])) {
+            $doi = $extractedData['doi'];
+        } else {
+            $doi = $this->extractDoi($item);
+        }
 
-        // Extract DOI from various sources
-        $doi = $this->extractDoi($item);
-
-        // Get abstract from multiple sources
-        $abstract = $this->extractAbstract($item);
-
-        // Parse date
+        // 公開日の取得（抽出データがあればそちらを優先）
         $publishedDate = null;
-        $date = $item->get_date('Y-m-d');
-        if ($date) {
-            $publishedDate = $date;
+        if ($hasExtractedData && !empty($extractedData['published_date'])) {
+            $publishedDate = $extractedData['published_date'];
+        } else {
+            $date = $item->get_date('Y-m-d');
+            if ($date) {
+                $publishedDate = $date;
+            }
+        }
+
+        // アブストラクトの取得（構造化メタデータ抽出時はdescriptionを使わない）
+        $abstract = null;
+        if ($hasExtractedData && !empty($extractedData['abstract'])) {
+            $abstract = $extractedData['abstract'];
+        } elseif (!$hasExtractedData) {
+            $abstract = $this->extractAbstract($item);
         }
 
         // Get link
         $link = $item->get_link();
+
+        // 構造化メタデータが抽出された場合，DOIからURLを生成（linkが不完全な場合）
+        if ($hasExtractedData && $doi && (!$link || strpos($link, 'browse') !== false)) {
+            $link = 'https://doi.org/' . $doi;
+        }
 
         // External ID: prefer DOI, then GUID, then link
         $externalId = $doi ?? $item->get_id() ?? $link;
@@ -454,7 +510,7 @@ class RssFetcherService
             }
         }
 
-        return array_unique(array_filter($authors));
+        return array_values(array_unique(array_filter($authors)));
     }
 
     /**
@@ -479,7 +535,7 @@ class RssFetcherService
         $doi = null;
         $link = $item->get_link();
 
-        // DOIの正規表現パターン
+        // DOIの正規表現パターン（基本形）
         $doiPattern = '/\b(10\.\d{4,}\/[^\s<>"\']+)/';
 
         // 1. リンクからDOIを抽出
@@ -516,15 +572,43 @@ class RssFetcherService
             }
         }
 
-        // 5. description/contentからDOIを抽出
+        // 5. description/contentからDOIを抽出（複数パターン対応）
         if (!$doi) {
             $content = $item->get_description() ?: $item->get_content();
-            if ($content && preg_match($doiPattern, $content, $matches)) {
-                $doi = $this->cleanDoi($matches[1]);
+            if ($content) {
+                $doi = $this->extractDoiFromText($content);
             }
         }
 
         return $doi;
+    }
+
+    /**
+     * テキストからDOIを抽出（複数パターン対応）
+     */
+    private function extractDoiFromText(string $text): ?string
+    {
+        // パターン1: [ DOI ] ラベル形式（J-STAGE等）
+        if (preg_match('/\[\s*DOI\s*\]\s*(?:https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,}\/[^\s\]\)]+)/i', $text, $matches)) {
+            return $this->cleanDoi($matches[1]);
+        }
+
+        // パターン2: DOI: または DOI： ラベル形式
+        if (preg_match('/DOI\s*[:：]\s*(?:https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,}\/[^\s<>"\']+)/i', $text, $matches)) {
+            return $this->cleanDoi($matches[1]);
+        }
+
+        // パターン3: doi.org URL形式
+        if (preg_match('/(?:https?:\/\/)?(?:dx\.)?doi\.org\/(10\.\d{4,}\/[^\s<>"\']+)/i', $text, $matches)) {
+            return $this->cleanDoi($matches[1]);
+        }
+
+        // パターン4: 既存パターン（フォールバック）
+        if (preg_match('/\b(10\.\d{4,}\/[^\s<>"\']+)/', $text, $matches)) {
+            return $this->cleanDoi($matches[1]);
+        }
+
+        return null;
     }
 
     /**
@@ -885,7 +969,7 @@ class RssFetcherService
         if (!empty($patterns['authors'])) {
             if (preg_match('/' . $patterns['authors'] . '/i', $summaryContent, $matches)) {
                 $authorsStr = $matches[1] ?? $matches[0];
-                $result['authors'] = array_map('trim', preg_split('/[,;]/', $authorsStr));
+                $result['authors'] = array_values(array_filter(array_map('trim', preg_split('/[,;]/', $authorsStr))));
             }
         }
 

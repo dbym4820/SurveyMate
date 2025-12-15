@@ -26,7 +26,10 @@ class TrendController extends Controller
     {
         $user = $request->attributes->get('user');
 
-        $dateRange = $this->getDateRange($period);
+        // カスタム日付範囲の場合はクエリパラメータから取得
+        $dateFrom = $request->query('dateFrom');
+        $dateTo = $request->query('dateTo');
+        $dateRange = $this->getDateRange($period, $dateFrom, $dateTo);
 
         if (!$dateRange) {
             return response()->json(['error' => '無効な期間です'], 400);
@@ -38,6 +41,12 @@ class TrendController extends Controller
             $tagIds = $tagIds ? array_map('intval', explode(',', $tagIds)) : [];
         }
 
+        // Get journal IDs from query string (optional)
+        $journalIds = $request->query('journalIds', []);
+        if (is_string($journalIds)) {
+            $journalIds = $journalIds ? explode(',', $journalIds) : [];
+        }
+
         $papersQuery = Paper::with('journal:id,name,color')
             ->forUser($user->id)
             ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']]);
@@ -47,6 +56,11 @@ class TrendController extends Controller
             $papersQuery->whereHas('tags', function ($query) use ($tagIds) {
                 $query->whereIn('tags.id', $tagIds);
             });
+        }
+
+        // Filter by journals if specified
+        if (!empty($journalIds)) {
+            $papersQuery->whereIn('journal_id', $journalIds);
         }
 
         $papers = $papersQuery->orderBy('published_date', 'desc')
@@ -73,6 +87,7 @@ class TrendController extends Controller
             'papers' => $papers,
             'count' => $papers->count(),
             'tagIds' => $tagIds,
+            'journalIds' => $journalIds,
         ]);
     }
 
@@ -83,7 +98,10 @@ class TrendController extends Controller
     {
         $user = $request->attributes->get('user');
 
-        $dateRange = $this->getDateRange($period);
+        // カスタム日付範囲の場合はリクエストボディから取得
+        $dateFrom = $request->input('dateFrom');
+        $dateTo = $request->input('dateTo');
+        $dateRange = $this->getDateRange($period, $dateFrom, $dateTo);
 
         if (!$dateRange) {
             return response()->json(['error' => '無効な期間です'], 400);
@@ -95,6 +113,12 @@ class TrendController extends Controller
             $tagIds = [];
         }
 
+        // Get journal IDs from request (optional)
+        $journalIds = $request->input('journalIds', []);
+        if (!is_array($journalIds)) {
+            $journalIds = [];
+        }
+
         $papersQuery = Paper::with(['journal:id,name', 'tags:id,name'])
             ->forUser($user->id)
             ->whereBetween('published_date', [$dateRange['from'], $dateRange['to']]);
@@ -104,6 +128,11 @@ class TrendController extends Controller
             $papersQuery->whereHas('tags', function ($query) use ($tagIds) {
                 $query->whereIn('tags.id', $tagIds);
             });
+        }
+
+        // Filter by journals if specified
+        if (!empty($journalIds)) {
+            $papersQuery->whereIn('journal_id', $journalIds);
         }
 
         $papers = $papersQuery->orderBy('published_date', 'desc')->get();
@@ -126,7 +155,7 @@ class TrendController extends Controller
         $provider = $request->input('provider', config('services.ai.provider', 'claude'));
 
         try {
-            $summary = $this->generateTrendSummary($user->id, $papers, $period, $dateRange, $provider, $tagIds);
+            $summary = $this->generateTrendSummary($user->id, $papers, $period, $dateRange, $provider, $tagIds, $journalIds);
 
             return response()->json([
                 'success' => true,
@@ -138,6 +167,7 @@ class TrendController extends Controller
                 'paperCount' => $papers->count(),
                 'provider' => $provider,
                 'tagIds' => $tagIds,
+                'journalIds' => $journalIds,
                 'summary' => $summary,
             ]);
         } catch (\Exception $e) {
@@ -154,7 +184,10 @@ class TrendController extends Controller
     {
         $user = $request->attributes->get('user');
 
-        $dateRange = $this->getDateRange($period);
+        // カスタム日付範囲の場合はクエリパラメータから取得
+        $customDateFrom = $request->query('dateFrom');
+        $customDateTo = $request->query('dateTo');
+        $dateRange = $this->getDateRange($period, $customDateFrom, $customDateTo);
 
         if (!$dateRange) {
             return response()->json(['error' => '無効な期間です'], 400);
@@ -169,8 +202,14 @@ class TrendController extends Controller
             $tagIds = $tagIds ? array_map('intval', explode(',', $tagIds)) : [];
         }
 
-        // Try to get latest summary for user with matching tags
-        $savedSummary = TrendSummary::findLatestForUser($user->id, $period, $tagIds ?: null);
+        // Get journal IDs from query string (optional)
+        $journalIds = $request->query('journalIds', []);
+        if (is_string($journalIds)) {
+            $journalIds = $journalIds ? explode(',', $journalIds) : [];
+        }
+
+        // Try to get latest summary for user with matching tags and journals
+        $savedSummary = TrendSummary::findLatestForUser($user->id, $period, $tagIds ?: null, $journalIds ?: null);
 
         if ($savedSummary) {
             return response()->json([
@@ -185,6 +224,7 @@ class TrendController extends Controller
                 'model' => $savedSummary->ai_model,
                 'paperCount' => $savedSummary->paper_count,
                 'tagIds' => $savedSummary->tag_ids ?? [],
+                'journalIds' => $savedSummary->journal_ids ?? [],
                 'summary' => $savedSummary->toApiResponse(),
             ]);
         }
@@ -251,8 +291,22 @@ class TrendController extends Controller
     /**
      * Get date range for a period
      */
-    private function getDateRange(string $period): ?array
+    private function getDateRange(string $period, ?string $dateFrom = null, ?string $dateTo = null): ?array
     {
+        // カスタム期間の場合
+        if ($period === 'custom') {
+            if (!$dateFrom || !$dateTo) {
+                return null;
+            }
+            try {
+                $from = Carbon::parse($dateFrom)->startOfDay();
+                $to = Carbon::parse($dateTo)->endOfDay();
+                return ['from' => $from, 'to' => $to];
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+
         $now = Carbon::now();
         $to = $now->copy()->endOfDay();
 
@@ -279,7 +333,7 @@ class TrendController extends Controller
     /**
      * Generate trend summary using AI
      */
-    private function generateTrendSummary(int $userId, $papers, string $period, array $dateRange, string $provider = 'claude', array $tagIds = []): array
+    private function generateTrendSummary(int $userId, $papers, string $period, array $dateRange, string $provider = 'claude', array $tagIds = [], array $journalIds = []): array
     {
         $periodLabels = [
             'day' => '今日',
@@ -288,7 +342,12 @@ class TrendController extends Controller
             'halfyear' => '過去半年',
         ];
 
-        $periodLabel = $periodLabels[$period] ?? $period;
+        // カスタム期間の場合は日付範囲を表示
+        if ($period === 'custom') {
+            $periodLabel = $dateRange['from']->format('Y/m/d') . ' 〜 ' . $dateRange['to']->format('Y/m/d');
+        } else {
+            $periodLabel = $periodLabels[$period] ?? $period;
+        }
 
         // Group papers by journal
         $byJournal = $papers->groupBy(function ($paper) {
@@ -326,6 +385,7 @@ class TrendController extends Controller
             'recommendations' => $result['recommendations'] ?? null,
             'paper_count' => $papers->count(),
             'tag_ids' => !empty($tagIds) ? $tagIds : null,
+            'journal_ids' => !empty($journalIds) ? $journalIds : null,
         ]);
 
         return $result;
