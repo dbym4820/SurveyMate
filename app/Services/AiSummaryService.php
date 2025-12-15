@@ -18,6 +18,9 @@ class AiSummaryService
     /** @var User|null */
     private $user;
 
+    /** @var FullTextFetcherService|null */
+    private $fullTextFetcher;
+
     /**
      * Set the user context for API key retrieval
      * Always refresh from database to ensure we have the latest settings
@@ -78,6 +81,123 @@ class AiSummaryService
     }
 
     /**
+     * Get FullTextFetcherService instance (lazy loading)
+     */
+    private function getFullTextFetcher(): FullTextFetcherService
+    {
+        if ($this->fullTextFetcher === null) {
+            $this->fullTextFetcher = app(FullTextFetcherService::class);
+        }
+        return $this->fullTextFetcher;
+    }
+
+    /**
+     * データソースの優先順位に従って要約用コンテンツを準備
+     *
+     * 優先順位:
+     * 1. PDF（ローカルまたはリモート）
+     * 2. full_text（既に取得済みの本文）
+     * 3. DOIページから本文を取得
+     * 4. アブストラクト
+     * 5. タイトル+利用可能なメタデータ
+     *
+     * @param Paper $paper
+     * @return array ['source' => string, 'content' => string|null, 'pdf_url' => string|null, 'pdf_available' => bool]
+     */
+    private function prepareContentForSummary(Paper $paper): array
+    {
+        // 1. PDF（ローカルまたはリモート）があるかチェック
+        if ($paper->hasLocalPdf() || $paper->pdf_url) {
+            return [
+                'source' => 'pdf',
+                'content' => null,
+                'pdf_url' => $paper->pdf_url,
+                'pdf_available' => true,
+            ];
+        }
+
+        // 2. 既に取得済みの本文があるかチェック
+        if ($paper->hasFullText()) {
+            return [
+                'source' => 'full_text',
+                'content' => $paper->full_text,
+                'pdf_url' => null,
+                'pdf_available' => false,
+            ];
+        }
+
+        // 3. DOIがあればDOIページから本文取得を試みる
+        if (!empty($paper->doi)) {
+            Log::info("Attempting to fetch full text from DOI for paper {$paper->id}");
+
+            try {
+                $fetchResult = $this->getFullTextFetcher()->fetchFullText($paper);
+
+                if ($fetchResult['success']) {
+                    // 取得成功した場合，論文レコードを更新
+                    $updateData = [
+                        'full_text_source' => $fetchResult['source'],
+                        'full_text_fetched_at' => now(),
+                    ];
+
+                    if ($fetchResult['text']) {
+                        $updateData['full_text'] = $fetchResult['text'];
+                    }
+                    if ($fetchResult['pdf_url']) {
+                        $updateData['pdf_url'] = $fetchResult['pdf_url'];
+                    }
+                    if ($fetchResult['pdf_path']) {
+                        $updateData['pdf_path'] = $fetchResult['pdf_path'];
+                    }
+
+                    $paper->update($updateData);
+                    $paper->refresh();
+
+                    // PDFが取得できた場合
+                    if ($fetchResult['pdf_url'] || $fetchResult['pdf_path']) {
+                        return [
+                            'source' => 'pdf_fetched',
+                            'content' => $fetchResult['text'],
+                            'pdf_url' => $fetchResult['pdf_url'],
+                            'pdf_available' => true,
+                        ];
+                    }
+
+                    // テキストのみ取得できた場合
+                    if ($fetchResult['text']) {
+                        return [
+                            'source' => 'doi_fetch',
+                            'content' => $fetchResult['text'],
+                            'pdf_url' => null,
+                            'pdf_available' => false,
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning("Failed to fetch full text for paper {$paper->id}: " . $e->getMessage());
+            }
+        }
+
+        // 4. アブストラクトがあればそれを使用
+        if (!empty($paper->abstract)) {
+            return [
+                'source' => 'abstract',
+                'content' => $paper->abstract,
+                'pdf_url' => null,
+                'pdf_available' => false,
+            ];
+        }
+
+        // 5. 最終手段：タイトルと利用可能なメタデータのみ
+        return [
+            'source' => 'minimal',
+            'content' => null,
+            'pdf_url' => null,
+            'pdf_available' => false,
+        ];
+    }
+
+    /**
      * Generate summary for a paper
      *
      * @param Paper $paper
@@ -89,20 +209,35 @@ class AiSummaryService
     {
         $startTime = microtime(true);
 
+        // データソース優先順位に従ってコンテンツを準備
+        $contentInfo = $this->prepareContentForSummary($paper);
+        $inputSource = $contentInfo['source'];
+
         switch ($provider) {
             case 'claude':
-                // ClaudeはPDFを直接入力できるので，PDF URLがあればPDFを送信
-                if ($paper->pdf_url) {
-                    $result = $this->callClaudeWithPdf($paper, $model);
+                // ClaudeはPDFを直接入力できる
+                if ($contentInfo['pdf_available']) {
+                    $pdfUrl = $contentInfo['pdf_url'] ?? $paper->pdf_url;
+                    if ($pdfUrl) {
+                        $result = $this->callClaudeWithPdf($paper, $model);
+                        $result['input_source'] = $inputSource;
+                    } else {
+                        // ローカルPDFのみの場合はテキストにフォールバック
+                        $prompt = $this->buildPrompt($paper, $contentInfo);
+                        $result = $this->callClaude($prompt, $model);
+                        $result['input_source'] = $inputSource;
+                    }
                 } else {
-                    $prompt = $this->buildPrompt($paper);
+                    $prompt = $this->buildPrompt($paper, $contentInfo);
                     $result = $this->callClaude($prompt, $model);
+                    $result['input_source'] = $inputSource;
                 }
                 break;
             default:
                 // OpenAIはテキストのみ対応
-                $prompt = $this->buildPrompt($paper);
+                $prompt = $this->buildPrompt($paper, $contentInfo);
                 $result = $this->callOpenAI($prompt, $model);
+                $result['input_source'] = $inputSource;
                 break;
         }
 
@@ -112,15 +247,37 @@ class AiSummaryService
         return $result;
     }
 
-    private function buildPrompt(Paper $paper): string
+    /**
+     * Build prompt for text-based summary generation
+     *
+     * @param Paper $paper
+     * @param array|null $contentInfo Content information from prepareContentForSummary()
+     * @return string
+     */
+    private function buildPrompt(Paper $paper, ?array $contentInfo = null): string
     {
         $authors = is_array($paper->authors) ? implode(', ', $paper->authors) : ($paper->authors ?? '不明');
         $journalName = ($paper->journal && $paper->journal->name) ? $paper->journal->name : '不明';
 
-        // 本文があれば使用，なければアブストラクト
-        $hasFullText = $paper->hasFullText();
-        $contentLabel = $hasFullText ? '本文' : 'アブストラクト';
-        $content = $paper->getTextForSummary();
+        // contentInfoがなければ従来の方式（後方互換性）
+        if ($contentInfo === null) {
+            $contentInfo = [
+                'source' => $paper->hasFullText() ? 'full_text' : 'abstract',
+                'content' => $paper->getTextForSummary(),
+                'pdf_available' => false,
+            ];
+        }
+
+        $source = $contentInfo['source'];
+        $content = $contentInfo['content'];
+
+        // データソースに応じたラベルと説明
+        $contentLabel = match ($source) {
+            'full_text', 'doi_fetch' => '本文',
+            'abstract' => 'アブストラクト',
+            'minimal' => 'メタデータ',
+            default => 'テキスト',
+        };
 
         // 本文が長すぎる場合は切り詰め（トークン制限対策）
         $maxContentLength = 30000; // 約30,000文字（GPT-4oで約10,000トークン程度）
@@ -128,7 +285,23 @@ class AiSummaryService
             $content = mb_substr($content, 0, $maxContentLength) . "\n\n[... 以下省略 ...]";
         }
 
-        $prompt = <<<PROMPT
+        // 最小限のデータのみの場合は特別なプロンプト
+        if ($source === 'minimal') {
+            $prompt = <<<PROMPT
+以下の学術論文について，タイトルと利用可能な情報のみに基づいて，日本語で要約を作成してください．
+
+【論文情報】
+タイトル: {$paper->title}
+著者: {$authors}
+論文誌: {$journalName}
+公開日: {$paper->published_date}
+DOI: {$paper->doi}
+
+※ 注意：この論文の本文やアブストラクトにアクセスできませんでした．タイトルと上記のメタデータのみに基づいて，論文の内容を推測し，簡潔な要約を作成してください．推測に基づく部分はその旨を明記してください．
+
+PROMPT;
+        } else {
+            $prompt = <<<PROMPT
 以下の学術論文について，日本語で構造化された要約を作成してください．
 
 【論文情報】
@@ -141,12 +314,14 @@ class AiSummaryService
 
 PROMPT;
 
-        if ($hasFullText) {
-            $prompt .= <<<PROMPT
+            // 本文の場合は追加説明
+            if (in_array($source, ['full_text', 'doi_fetch'])) {
+                $prompt .= <<<PROMPT
 
 ※ 本文全体が提供されています．論文の主要な内容を網羅的に要約してください．
 
 PROMPT;
+            }
         }
 
         // ユーザーの調査観点設定を取得してプロンプトに組み込む
