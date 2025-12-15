@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 use Symfony\Component\HttpFoundation\Response;
 use App\Models\Session;
 
@@ -41,10 +42,10 @@ class SessionAuth
         $session->expires_at = now()->addSeconds($sessionLifetime);
         $session->save();
 
-        $response = $next($request);
+        // クッキーの有効期限も更新（Cookie::queueはすべてのレスポンスタイプで動作）
+        Cookie::queue('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
 
-        // クッキーの有効期限も更新
-        return $response->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
+        return $next($request);
     }
 
     private function getSessionId(Request $request): ?string
