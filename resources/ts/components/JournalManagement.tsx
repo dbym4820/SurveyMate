@@ -118,7 +118,7 @@ export default function JournalManagement(): JSX.Element {
   };
 
   return (
-    <main className="w-full px-4 sm:w-[95%] md:w-[90%] lg:w-[85%] sm:px-0 mx-auto py-4 sm:py-6">
+    <main className="w-full max-w-full overflow-x-hidden px-4 sm:w-[95%] md:w-[90%] lg:w-[85%] sm:px-0 mx-auto py-4 sm:py-6">
       {/* アクションバー */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm text-gray-600">

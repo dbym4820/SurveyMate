@@ -275,22 +275,15 @@ if [ "$DB_CONNECTION" = "mysql" ]; then
         DB_EXISTS=$($MYSQL_CMD -N -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$DB_DATABASE'" 2>/dev/null || echo "")
 
         if [ -n "$DB_EXISTS" ]; then
-            echo "  Database '$DB_DATABASE' already exists. Dropping and recreating..."
-            $MYSQL_CMD -e "DROP DATABASE \`$DB_DATABASE\`;" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                echo "  Database dropped: OK"
-            else
-                echo "  Failed to drop database."
-                exit 1
-            fi
-        fi
-
-        echo "  Creating database '$DB_DATABASE'..."
-        $MYSQL_CMD -e "CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
-        if [ $? -eq 0 ]; then
-            echo "  Database created: OK"
+            echo "  Database '$DB_DATABASE' already exists. Keeping existing data."
         else
-            echo "  Failed to create database. Please create it manually."
+            echo "  Creating database '$DB_DATABASE'..."
+            $MYSQL_CMD -e "CREATE DATABASE \`$DB_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo "  Database created: OK"
+            else
+                echo "  Failed to create database. Please create it manually."
+            fi
         fi
     else
         echo "  Warning: MySQL client not found. Please create database manually."
