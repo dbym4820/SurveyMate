@@ -118,7 +118,7 @@ export default function JournalManagement(): JSX.Element {
   };
 
   return (
-    <main className="w-[85%] mx-auto py-6">
+    <main className="w-full px-4 sm:w-[95%] md:w-[90%] lg:w-[85%] sm:px-0 mx-auto py-4 sm:py-6">
       {/* アクションバー */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -168,13 +168,13 @@ export default function JournalManagement(): JSX.Element {
             {journals.map((journal) => (
               <div
                 key={journal.id}
-                className={`bg-white rounded-xl shadow-sm border p-5 transition-opacity ${
+                className={`bg-white rounded-xl shadow-sm border p-3 sm:p-4 md:p-5 transition-opacity ${
                   journal.is_active === 0 || journal.is_active === false ? 'opacity-60 border-gray-300' : 'border-gray-200'
                 }`}
               >
-                <div className="flex items-start gap-4">
+                <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
                   {/* 色バー */}
-                  <div className={`w-2 self-stretch rounded-full ${journal.color || 'bg-gray-500'}`} />
+                  <div className={`h-2 w-full sm:w-2 sm:h-auto sm:self-stretch rounded-full ${journal.color || 'bg-gray-500'}`} />
 
                   {/* 情報 */}
                   <div className="flex-1 min-w-0">
@@ -216,7 +216,7 @@ export default function JournalManagement(): JSX.Element {
                   </div>
 
                   {/* アクション */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end sm:justify-start">
                     {journal.is_active !== 0 && journal.is_active !== false && (
                       journal.source_type === 'ai_generated' ? (
                         <button
