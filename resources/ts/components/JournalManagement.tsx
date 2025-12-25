@@ -168,7 +168,7 @@ export default function JournalManagement(): JSX.Element {
             {journals.map((journal) => (
               <div
                 key={journal.id}
-                className={`bg-white rounded-xl shadow-sm border p-3 sm:p-4 md:p-5 transition-opacity overflow-hidden ${
+                className={`bg-white rounded-xl shadow-sm border p-3 sm:p-4 md:p-5 transition-opacity ${
                   journal.is_active === 0 || journal.is_active === false ? 'opacity-60 border-gray-300' : 'border-gray-200'
                 }`}
               >
@@ -177,7 +177,7 @@ export default function JournalManagement(): JSX.Element {
                   <div className={`h-2 w-full sm:w-2 sm:h-auto sm:self-stretch rounded-full ${journal.color || 'bg-gray-500'}`} />
 
                   {/* 情報 */}
-                  <div className="flex-1 min-w-0 w-full sm:w-auto overflow-hidden">
+                  <div className="flex-1 min-w-0 w-full sm:w-auto">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{journal.name}</h3>
                       {journal.source_type === 'ai_generated' && (
@@ -205,13 +205,15 @@ export default function JournalManagement(): JSX.Element {
                       )}
                     </div>
                     {/* ソースURL */}
-                    <div className="mt-2 text-xs text-gray-400 truncate">
-                      {journal.source_type === 'ai_generated' ? (
-                        <ExternalLink className="w-3 h-3 inline mr-1" />
-                      ) : (
-                        <Rss className="w-3 h-3 inline mr-1" />
-                      )}
-                      {journal.rss_url}
+                    <div className="mt-2 text-xs text-gray-400 break-all">
+                      <span className="inline-flex items-start gap-1">
+                        {journal.source_type === 'ai_generated' ? (
+                          <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <Rss className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                        )}
+                        <span>{journal.rss_url}</span>
+                      </span>
                     </div>
                   </div>
 
