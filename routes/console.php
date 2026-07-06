@@ -46,3 +46,9 @@ Schedule::command('push:send')
 Schedule::call(function () {
     \App\Models\Session::cleanupExpired();
 })->hourly();
+
+// Recover stale PDF processing statuses - Hourly
+// (papers stuck in pending/processing due to worker crashes)
+Schedule::call(function () {
+    \App\Services\QueueRunnerService::recoverStalePapers();
+})->hourly();

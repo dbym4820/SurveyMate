@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Jobs\ProcessPaperFullTextJob;
+use App\Models\Paper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -133,6 +135,71 @@ class QueueRunnerService
         }
 
         return false;
+    }
+
+    /**
+     * スタックしたPDF処理ステータスを回復する
+     *
+     * ワーカープロセスがOOM kill・サーバ再起動等で異常終了すると，
+     * ジョブのfailed()ハンドラが呼ばれずpdf_statusが
+     * 「processing」「pending」のまま残る．これらを検出し，
+     * 再試行上限内なら再ディスパッチ，上限超過ならfailed（PDFなし）に確定する．
+     *
+     * @return array{redispatched: int, failed: int}
+     */
+    public static function recoverStalePapers(int $maxAttempts = 2, string $queue = 'pdf-processing'): array
+    {
+        $redispatched = 0;
+        $failed = 0;
+
+        // 24時間以上キューに残ったままのジョブはワーカーが機能していない
+        // と判断して削除する（論文側は下のpending回復で再ディスパッチ／failed確定される）
+        if (config('queue.default') === 'database') {
+            $deleted = DB::table('jobs')
+                ->where('queue', $queue)
+                ->where('created_at', '<', now()->subDay()->getTimestamp())
+                ->delete();
+            if ($deleted > 0) {
+                Log::warning("Deleted {$deleted} stale jobs from queue '{$queue}' (older than 24h)");
+            }
+        }
+
+        // processing のままの論文：ジョブタイムアウトは5分×2回なので，
+        // 20分以上経過していればワーカーは死んでいると判断できる
+        $staleProcessing = Paper::where('pdf_status', 'processing')
+            ->where('updated_at', '<', now()->subMinutes(20))
+            ->get();
+
+        // pending のままの論文：キューにジョブが残っていなければジョブは消失している．
+        // ジョブが残っていても24時間以上進まないものはスタックとみなす
+        $pendingThreshold = self::hasPendingJobs($queue)
+            ? now()->subDay()
+            : now()->subMinutes(60);
+        $stalePending = Paper::where('pdf_status', 'pending')
+            ->where('updated_at', '<', $pendingThreshold)
+            ->get();
+
+        foreach ($staleProcessing->merge($stalePending) as $paper) {
+            if ($paper->pdf_fetch_attempts >= $maxAttempts) {
+                $paper->update(['pdf_status' => 'failed']);
+                Log::info("Recovered stale paper {$paper->id}: marked as failed after {$paper->pdf_fetch_attempts} attempts");
+                $failed++;
+            } else {
+                $paper->update([
+                    'pdf_status' => 'pending',
+                    'pdf_fetch_attempts' => $paper->pdf_fetch_attempts + 1,
+                ]);
+                ProcessPaperFullTextJob::dispatch($paper->id);
+                Log::info("Recovered stale paper {$paper->id}: redispatched (attempt {$paper->pdf_fetch_attempts})");
+                $redispatched++;
+            }
+        }
+
+        if ($redispatched > 0) {
+            self::startWorkerIfNeeded($queue);
+        }
+
+        return ['redispatched' => $redispatched, 'failed' => $failed];
     }
 
     /**

@@ -164,6 +164,14 @@ class PaperController extends Controller
     {
         $user = $request->attributes->get('user');
 
+        // ワーカー異常終了等でpending/processingのままスタックした論文を回復
+        // （再試行上限内なら再ディスパッチ，上限超過ならfailedに確定）
+        try {
+            QueueRunnerService::recoverStalePapers();
+        } catch (\Exception $e) {
+            \Log::warning('Failed to recover stale papers: ' . $e->getMessage());
+        }
+
         // ユーザーの論文でPDF処理に関係するもの（pending/processing/completed/failed）のIDとステータスを取得
         $paperStatuses = Paper::forUser($user->id)
             ->whereNotNull('pdf_status')

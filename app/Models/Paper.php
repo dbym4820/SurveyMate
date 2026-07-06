@@ -20,6 +20,7 @@ class Paper extends Model
         'pdf_url',
         'pdf_path',
         'pdf_status',
+        'pdf_fetch_attempts',
         'full_text_fetched_at',
         'url',
         'doi',

@@ -14,6 +14,7 @@ class FullTextFetcherService
     private const UNPAYWALL_API_URL = 'https://api.unpaywall.org/v2/';
     private const CROSSREF_API_URL = 'https://api.crossref.org/works/';
     private const DOI_RESOLVER_URL = 'https://doi.org/';
+    private const SEMANTIC_SCHOLAR_API_URL = 'https://api.semanticscholar.org/graph/v1/paper/DOI:';
 
     private ?string $unpaywallEmail;
     private int $timeout;
@@ -81,7 +82,13 @@ class FullTextFetcherService
             return $crossrefResult;
         }
 
-        // 4. フォールバック: 論文URLからHTML本文抽出
+        // 4. Semantic Scholar APIからOA PDFを取得
+        $semanticResult = $this->fetchFromSemanticScholar($paper);
+        if ($semanticResult['success']) {
+            return $semanticResult;
+        }
+
+        // 5. フォールバック: 論文URLからHTML本文抽出
         if (!empty($paper->url)) {
             $result = $this->extractTextFromHtml($paper->url);
             if ($result['success']) {
@@ -534,6 +541,56 @@ class FullTextFetcherService
         } catch (\Exception $e) {
             Log::warning("CrossRef API exception for {$paper->doi}: " . $e->getMessage());
             return $this->failureResult('CrossRef exception: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Semantic Scholar APIからオープンアクセスPDFを取得
+     */
+    private function fetchFromSemanticScholar(Paper $paper): array
+    {
+        try {
+            $cleanDoi = trim($paper->doi);
+            $url = self::SEMANTIC_SCHOLAR_API_URL . $cleanDoi . '?fields=openAccessPdf';
+
+            Log::info("Semantic Scholar API request: {$url}");
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'User-Agent' => 'SurveyMate/1.0 (mailto:' . ($this->unpaywallEmail ?? 'research@example.com') . ')',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                Log::info("Semantic Scholar API: No data for DOI {$paper->doi} (HTTP {$response->status()})");
+                return $this->failureResult('Semantic Scholar API error: ' . $response->status());
+            }
+
+            $pdfUrl = $response->json()['openAccessPdf']['url'] ?? null;
+
+            if (empty($pdfUrl)) {
+                return $this->failureResult('Semantic Scholar: no open access PDF');
+            }
+
+            Log::info("Semantic Scholar: Found OA PDF for DOI {$paper->doi}: {$pdfUrl}");
+
+            $result = $this->extractTextFromPdf($pdfUrl, $paper);
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'source' => 'semantic_scholar_pdf',
+                    'text' => $this->truncateText($result['text'] ?? ''),
+                    'pdf_url' => $pdfUrl,
+                    'pdf_path' => $result['pdf_path'] ?? null,
+                    'error' => null,
+                ];
+            }
+
+            return $this->failureResult('Semantic Scholar PDF extraction failed: ' . ($result['error'] ?? 'unknown'));
+
+        } catch (\Exception $e) {
+            Log::warning("Semantic Scholar API exception for {$paper->doi}: " . $e->getMessage());
+            return $this->failureResult('Semantic Scholar exception: ' . $e->getMessage());
         }
     }
 

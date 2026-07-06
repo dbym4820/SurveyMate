@@ -527,6 +527,12 @@ function PaperCardComponent({ paper, onTagsChange, hasAnyApiKey = true }: PaperC
                     PDF取得中
                   </span>
                 )}
+                {/* PDF取得失敗（PDFなし） */}
+                {paper.pdf_status === 'failed' && !paper.has_local_pdf && !hasLocalPdf && (
+                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full" title="PDFを取得できませんでした">
+                    PDFなし
+                  </span>
+                )}
               </div>
 
               {/* タグ（右上） */}
