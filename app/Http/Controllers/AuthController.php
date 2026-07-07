@@ -101,7 +101,7 @@ class AuthController extends Controller
             // デフォルト論文誌を作成（RSS取得なし）
             // RSSはユーザーが手動で取得するか，スケジューラが自動取得する
             try {
-                $this->createDefaultJournalsWithoutFetch($user);
+                Journal::createDefaultsForUser($user);
             } catch (\Exception $e) {
                 Log::warning("デフォルト論文誌の作成に失敗: " . $e->getMessage());
             }
@@ -185,36 +185,6 @@ class AuthController extends Controller
                 'last_login_at' => $user->last_login_at,
             ],
         ]);
-    }
-
-    /**
-     * 新規ユーザーにデフォルトの論文誌を作成（RSS取得なし）
-     */
-    private function createDefaultJournalsWithoutFetch(User $user): array
-    {
-        $defaultJournals = config('surveymate.default_journals', []);
-        $createdJournals = [];
-
-        foreach ($defaultJournals as $journalConfig) {
-            $name = $journalConfig['name'];
-
-            // 既に同名のジャーナルがあればスキップ
-            if (Journal::where('user_id', $user->id)->where('name', $name)->exists()) {
-                continue;
-            }
-
-            $journal = Journal::create([
-                'user_id' => $user->id,
-                'name' => $name,
-                'rss_url' => $journalConfig['rss_url'],
-                'color' => $journalConfig['color'] ?? 'bg-gray-500',
-                'is_active' => true,
-            ]);
-
-            $createdJournals[] = $journal;
-        }
-
-        return $createdJournals;
     }
 
 }

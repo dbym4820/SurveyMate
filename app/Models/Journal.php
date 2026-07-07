@@ -50,6 +50,34 @@ class Journal extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * 新規ユーザーにデフォルトの論文誌を作成（RSS取得なし）
+     * RSSはユーザーが手動で取得するか，スケジューラが自動取得する
+     */
+    public static function createDefaultsForUser(User $user): array
+    {
+        $createdJournals = [];
+
+        foreach (config('surveymate.default_journals', []) as $journalConfig) {
+            $name = $journalConfig['name'];
+
+            // 既に同名のジャーナルがあればスキップ
+            if (self::where('user_id', $user->id)->where('name', $name)->exists()) {
+                continue;
+            }
+
+            $createdJournals[] = self::create([
+                'user_id' => $user->id,
+                'name' => $name,
+                'rss_url' => $journalConfig['rss_url'],
+                'color' => $journalConfig['color'] ?? 'bg-gray-500',
+                'is_active' => true,
+            ]);
+        }
+
+        return $createdJournals;
+    }
+
     public function papers(): HasMany
     {
         return $this->hasMany(Paper::class);

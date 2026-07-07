@@ -37,6 +37,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | HCIMLab SSO (OpenID Connect)
+    |--------------------------------------------------------------------------
+    |
+    | 研究室認証基盤（hcimlab_auth）との OIDC 連携設定．
+    | SSO_IDP_URL はサブパス（/hcimlab_auth 等）を含むIdPのベースURL．
+    | エンドポイントの正準値は discovery から取得する．
+    |
+    */
+    'sso' => [
+        'enabled' => env('SSO_ENABLED', false),
+        'idp_url' => rtrim((string) env('SSO_IDP_URL', ''), '/'),
+        'client_id' => env('SSO_CLIENT_ID'),
+        'client_secret' => env('SSO_CLIENT_SECRET'),
+        // 未指定時は APP_URL + /auth/callback（IdP側の登録値と完全一致させること）
+        'redirect_uri' => env('SSO_REDIRECT_URI'),
+        'scopes' => env('SSO_SCOPES', 'openid profile email lab'),
+        'button_label' => env('SSO_BUTTON_LABEL', 'HCIMLab SSOでログイン'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | AI Services
     |--------------------------------------------------------------------------
     */

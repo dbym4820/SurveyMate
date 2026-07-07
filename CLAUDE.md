@@ -153,6 +153,16 @@ php artisan schedule:list
 - `POST /api/auth/register` - ユーザー登録（user_id + username + password）
 - `POST /api/auth/logout` - ログアウト
 - `GET /api/auth/me` - 現在のユーザー情報
+- `GET /api/auth/sso/status` - SSO有効状態（ログイン画面のボタン表示用）
+
+### SSO（HCIMLab認証基盤，OIDC）
+WebルートとしてSPAのcatch-allより先に定義（`routes/web.php`）：
+- `GET /auth/sso/redirect` - IdPの認可エンドポイントへリダイレクト（PKCE + state + nonce）
+- `GET /auth/callback` - IdPからのコールバック（id_tokenをJWKSで検証し，subで`users.sso_sub`にupsert）
+
+初回SSOログイン時はIdPの`user_id`クレームを本システムの`user_id`として自動登録する．
+同一`user_id`の既存ローカルアカウントがあればSSOを紐付ける．
+実装: `app/Services/HcimlabSsoService.php` + `app/Http/Controllers/SsoController.php`
 
 ### 論文・論文誌
 - `GET /api/papers` - 論文一覧（journals，tags，dateFromパラメータでフィルタ）
@@ -235,6 +245,13 @@ DEFAULT_JOURNALS=
 # Web Push通知（任意）
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
+
+# HCIMLab SSO（OpenID Connect，任意）
+SSO_ENABLED=false
+SSO_IDP_URL=          # 例: https://kshci-lab.net/software/hcimlab_auth
+SSO_CLIENT_ID=
+SSO_CLIENT_SECRET=
+SSO_REDIRECT_URI=     # 未指定時は APP_URL + /auth/callback
 ```
 
 ## 注意事項

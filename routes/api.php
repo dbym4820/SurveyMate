@@ -12,6 +12,7 @@ use App\Http\Controllers\PushController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\SummaryChatController;
 use App\Http\Controllers\GeneratedRssController;
+use App\Http\Controllers\SsoController;
 use App\Http\Middleware\SessionAuth;
 use App\Http\Middleware\AdminOnly;
 
@@ -43,6 +44,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/sso/status', [SsoController::class, 'status']);
 
     // Requires authentication
     Route::middleware(SessionAuth::class)->group(function () {

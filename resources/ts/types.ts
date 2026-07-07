@@ -159,6 +159,12 @@ export interface AuthMeResponse {
   user: User;
 }
 
+export interface SsoStatusResponse {
+  success: boolean;
+  enabled: boolean;
+  label: string;
+}
+
 export interface JournalsResponse {
   success: boolean;
   journals: Journal[];

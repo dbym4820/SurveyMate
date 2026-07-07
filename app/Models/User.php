@@ -11,6 +11,7 @@ class User extends Model
 {
     protected $fillable = [
         'user_id',      // ログイン用ID（ユニーク）
+        'sso_sub',      // SSO (OIDC) の sub クレーム（不変ID）
         'username',     // 表示名（重複可）
         'password',
         'password_hash',

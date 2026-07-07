@@ -2,6 +2,7 @@ import type {
   LoginResponse,
   RegisterResponse,
   AuthMeResponse,
+  SsoStatusResponse,
   JournalsResponse,
   PapersResponse,
   GenerateSummaryResponse,
@@ -107,6 +108,8 @@ export const api = {
       request('/auth/logout', { method: 'POST' }),
     me: (): Promise<AuthMeResponse> =>
       request('/auth/me'),
+    ssoStatus: (): Promise<SsoStatusResponse> =>
+      request('/auth/sso/status'),
   },
 
   // 論文誌

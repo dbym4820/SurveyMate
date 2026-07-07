@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { LogIn, UserPlus, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect, FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { LogIn, UserPlus, Loader2, AlertCircle, CheckCircle, KeyRound } from 'lucide-react';
 import { getBasePath } from '../api';
 import api from '../api';
 import type { User } from '../types';
@@ -22,6 +22,7 @@ interface LoginFormProps {
 
 export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [userId, setUserId] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,6 +32,39 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoLabel, setSsoLabel] = useState('SSOでログイン');
+
+  // SSO の有効状態を取得
+  useEffect(() => {
+    api.auth
+      .ssoStatus()
+      .then((data) => {
+        setSsoEnabled(data.enabled);
+        if (data.label) {
+          setSsoLabel(data.label);
+        }
+      })
+      .catch(() => {
+        // SSO 状態が取得できない場合はボタンを表示しない
+      });
+  }, []);
+
+  // SSO コールバックからのエラーを表示（表示後にURLから除去）
+  useEffect(() => {
+    const ssoError = searchParams.get('sso_error');
+    if (ssoError) {
+      setError(ssoError);
+      const next = new URLSearchParams(searchParams);
+      next.delete('sso_error');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // SSO ログイン開始（サーバ側のリダイレクトルートへ全画面遷移）
+  const handleSsoLogin = (): void => {
+    window.location.href = `${getBasePath()}/auth/sso/redirect`;
+  };
 
   const validateRegistration = (): string | null => {
     if (userId.length < 3 || userId.length > 50) {
@@ -275,6 +309,29 @@ export default function LoginForm({ mode, onLogin }: LoginFormProps): JSX.Elemen
             {mode === 'login' ? 'ログイン' : '登録する'}
           </button>
         </form>
+
+        {/* SSO ログイン */}
+        {ssoEnabled && (
+          <div className="mt-4">
+            <div className="relative flex items-center my-4">
+              <div className="flex-grow border-t border-gray-200"></div>
+              <span className="flex-shrink mx-3 text-xs text-gray-400">または</span>
+              <div className="flex-grow border-t border-gray-200"></div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSsoLogin}
+              disabled={loading}
+              className="w-full py-2.5 px-4 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors"
+            >
+              <KeyRound className="w-4 h-4" />
+              {ssoLabel}
+            </button>
+            <p className="mt-2 text-center text-[10px] text-gray-400">
+              初回ログイン時はアカウントが自動作成されます
+            </p>
+          </div>
+        )}
 
         {mode === 'login' && (
           <p className="mt-6 text-center text-xs text-gray-500">
