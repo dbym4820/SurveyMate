@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   TrendingUp, Calendar, FileText, Sparkles, Loader2,
   ChevronDown, ChevronUp, Clock, Target, Lightbulb,
@@ -92,11 +92,25 @@ export default function Trends(): JSX.Element {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
+  // シークバーで選択中の履歴（null = 最新の通常表示）
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+
+  // 生成日時の昇順（シークバーの左＝古い，右＝新しい）
+  const sortedHistory = useMemo(
+    () =>
+      [...trendHistory].sort((a, b) =>
+        (a.createdAt || '').localeCompare(b.createdAt || '')
+      ),
+    [trendHistory]
+  );
+  const viewingHistoryItem = historyIndex !== null ? sortedHistory[historyIndex] ?? null : null;
+
   useEffect(() => {
     fetchStats();
     fetchSettings();
     fetchTags();
     fetchJournals();
+    fetchHistory();
   }, []);
 
   const fetchSettings = async () => {
@@ -129,7 +143,7 @@ export default function Trends(): JSX.Element {
   const fetchHistory = async () => {
     try {
       setIsLoadingHistory(true);
-      const data = await api.trends.history(20);
+      const data = await api.trends.history(100);
       setTrendHistory(data.summaries || []);
     } catch (err) {
       console.error('Failed to fetch history:', err);
@@ -153,6 +167,8 @@ export default function Trends(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    // 期間・フィルタ変更時は履歴表示を解除して最新表示に戻す
+    setHistoryIndex(null);
     // カスタム期間の場合は両方の日付が設定されている必要がある
     if (selectedPeriod === 'custom') {
       if (customDateFrom && customDateTo) {
@@ -256,6 +272,8 @@ export default function Trends(): JSX.Element {
           journalInsights: data.summary.journalInsights || {},
           recommendations: data.summary.recommendations || [],
         });
+        setHistoryIndex(null);
+        fetchHistory();
       } else if (data.message) {
         setError(data.message);
       }
@@ -300,7 +318,7 @@ export default function Trends(): JSX.Element {
     await fetchHistory();
   };
 
-  const loadHistorySummary = (historySummary: TrendSummaryType) => {
+  const applyHistorySummary = (historySummary: TrendSummaryType) => {
     setSummary({
       overview: historySummary.overview || null,
       keyTopics: historySummary.keyTopics || [],
@@ -308,7 +326,43 @@ export default function Trends(): JSX.Element {
       journalInsights: historySummary.journalInsights || {},
       recommendations: historySummary.recommendations || [],
     });
+    setError(null);
+  };
+
+  const loadHistorySummary = (historySummary: TrendSummaryType) => {
+    applyHistorySummary(historySummary);
+    const index = sortedHistory.findIndex(s => s.id === historySummary.id);
+    setHistoryIndex(index >= 0 ? index : null);
     setShowHistory(false);
+  };
+
+  const seekHistory = (index: number) => {
+    const item = sortedHistory[index];
+    if (!item) return;
+    setHistoryIndex(index);
+    applyHistorySummary(item);
+  };
+
+  const resetToLatest = () => {
+    setHistoryIndex(null);
+    if (selectedPeriod === 'custom') {
+      if (customDateFrom && customDateTo) {
+        fetchSummary(selectedPeriod);
+      } else {
+        setSummary(null);
+      }
+    } else {
+      fetchSummary(selectedPeriod);
+    }
+  };
+
+  const formatHistoryDate = (iso: string | null) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
   };
 
   const currentStats = stats?.[selectedPeriod];
@@ -553,6 +607,99 @@ export default function Trends(): JSX.Element {
               </div>
             </div>
           </div>
+
+          {/* History Seekbar */}
+          {sortedHistory.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <History className="w-4 h-4" />
+                  <span>過去のトレンド分析をたどる（{sortedHistory.length}件）</span>
+                </div>
+                {viewingHistoryItem && (
+                  <button
+                    onClick={resetToLatest}
+                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    最新の表示に戻る
+                  </button>
+                )}
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={sortedHistory.length - 1}
+                step={1}
+                value={historyIndex ?? sortedHistory.length - 1}
+                onChange={(e) => seekHistory(Number(e.target.value))}
+                list="trend-history-ticks"
+                className="w-full accent-gray-600 cursor-pointer"
+              />
+              <datalist id="trend-history-ticks">
+                {sortedHistory.map((_, index) => (
+                  <option key={index} value={index} />
+                ))}
+              </datalist>
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>{formatHistoryDate(sortedHistory[0]?.createdAt ?? null)}</span>
+                <span>{formatHistoryDate(sortedHistory[sortedHistory.length - 1]?.createdAt ?? null)}</span>
+              </div>
+              {viewingHistoryItem && (
+                <div className="mt-3 p-3 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex items-center flex-wrap gap-2 text-xs text-gray-600">
+                    <span className="px-2 py-0.5 font-medium bg-gray-100 text-gray-700 rounded">
+                      {PERIOD_LABELS[viewingHistoryItem.period] || viewingHistoryItem.period}
+                    </span>
+                    {viewingHistoryItem.dateFrom && viewingHistoryItem.dateTo && (
+                      <span>
+                        対象期間: {viewingHistoryItem.dateFrom} 〜 {viewingHistoryItem.dateTo}
+                      </span>
+                    )}
+                    <span>{viewingHistoryItem.paperCount}件の論文</span>
+                    {viewingHistoryItem.createdAt && (
+                      <span className="text-gray-400">
+                        {new Date(viewingHistoryItem.createdAt).toLocaleString('ja-JP')} 生成
+                      </span>
+                    )}
+                  </div>
+                  {(viewingHistoryItem.tagIds.length > 0 || viewingHistoryItem.journalIds.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {viewingHistoryItem.tagIds.map(tagId => {
+                        const tag = tags.find(t => t.id === tagId);
+                        if (!tag) return null;
+                        return (
+                          <span
+                            key={`tag-${tagId}`}
+                            className="px-2 py-0.5 text-xs rounded-full bg-gray-50 text-gray-600 flex items-center gap-1 border border-gray-200"
+                          >
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            {tag.name}
+                          </span>
+                        );
+                      })}
+                      {viewingHistoryItem.journalIds.map(journalId => {
+                        const journal = journals.find(j => j.id === journalId);
+                        if (!journal) return null;
+                        return (
+                          <span
+                            key={`journal-${journalId}`}
+                            className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 flex items-center gap-1"
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            {journal.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {error && (
             <div className="p-4 bg-red-50 border-b border-red-200 text-red-700">

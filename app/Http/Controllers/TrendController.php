@@ -247,7 +247,7 @@ class TrendController extends Controller
     public function history(Request $request): JsonResponse
     {
         $user = $request->attributes->get('user');
-        $limit = (int) $request->query('limit', 20);
+        $limit = min(max((int) $request->query('limit', 20), 1), 200);
 
         $summaries = TrendSummary::getHistoryForUser($user->id, $limit);
 
