@@ -477,6 +477,7 @@ export interface TrendGenerateResponse {
   tagIds: number[];
   journalIds: string[];
   summary: {
+    id?: number;
     overview?: string;
     keyTopics?: Array<{
       topic: string;

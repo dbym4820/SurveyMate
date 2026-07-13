@@ -11,6 +11,7 @@ use App\Http\Controllers\TrendController;
 use App\Http\Controllers\PushController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\SummaryChatController;
+use App\Http\Controllers\TrendChatController;
 use App\Http\Controllers\GeneratedRssController;
 use App\Http\Controllers\SsoController;
 use App\Http\Middleware\SessionAuth;
@@ -131,6 +132,15 @@ Route::middleware(SessionAuth::class)->group(function () {
     Route::prefix('trends')->group(function () {
         Route::get('/stats', [TrendController::class, 'stats']);
         Route::get('/history', [TrendController::class, 'history']);
+
+        // Trend Chat (AI conversation about trend summaries)
+        // {period} ルートより先に定義すること
+        Route::prefix('summaries/{trendSummaryId}/chat')->group(function () {
+            Route::get('/', [TrendChatController::class, 'index']);
+            Route::post('/', [TrendChatController::class, 'send']);
+            Route::delete('/', [TrendChatController::class, 'clear']);
+        });
+
         Route::get('/{period}/papers', [TrendController::class, 'papers']);
         Route::get('/{period}/summary', [TrendController::class, 'summary']);
         Route::post('/{period}/generate', [TrendController::class, 'generate']);

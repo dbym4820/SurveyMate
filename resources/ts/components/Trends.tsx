@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   TrendingUp, Calendar, FileText, Sparkles, Loader2,
   ChevronDown, ChevronUp, Clock, Target, Lightbulb,
-  Tag, History, Check, X, BookOpen
+  Tag, History, Check, X, BookOpen, MessageCircle, Send, Trash2
 } from 'lucide-react';
 import api from '../api';
-import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType, Journal } from '../types';
+import type { ApiSettings, Tag as TagType, TrendSummary as TrendSummaryType, Journal, ChatMessage } from '../types';
 
 interface TrendStats {
   [period: string]: {
@@ -62,6 +62,8 @@ export default function Trends(): JSX.Element {
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('week');
   const [papers, setPapers] = useState<PeriodPaper[]>([]);
   const [summary, setSummary] = useState<TrendSummary | null>(null);
+  // 表示中の要約のDB上のID（チャットの紐付け先，nullならチャット不可）
+  const [summaryId, setSummaryId] = useState<number | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isLoadingPapers, setIsLoadingPapers] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -94,6 +96,14 @@ export default function Trends(): JSX.Element {
 
   // シークバーで選択中の履歴（null = 最新の通常表示）
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+
+  // チャット関連（表示中のトレンド要約についての対話）
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatFetching, setChatFetching] = useState(false);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
 
   // 生成日時の昇順（シークバーの左＝古い，右＝新しい）
   const sortedHistory = useMemo(
@@ -232,12 +242,15 @@ export default function Trends(): JSX.Element {
           journalInsights: data.summary.journalInsights || {},
           recommendations: data.summary.recommendations || [],
         });
+        setSummaryId(data.summary.id ?? null);
       } else {
         setSummary(null);
+        setSummaryId(null);
       }
     } catch (err) {
       console.error('Failed to fetch summary:', err);
       setSummary(null);
+      setSummaryId(null);
     }
   };
 
@@ -272,6 +285,7 @@ export default function Trends(): JSX.Element {
           journalInsights: data.summary.journalInsights || {},
           recommendations: data.summary.recommendations || [],
         });
+        setSummaryId(data.summary.id ?? null);
         setHistoryIndex(null);
         fetchHistory();
       } else if (data.message) {
@@ -326,6 +340,7 @@ export default function Trends(): JSX.Element {
       journalInsights: historySummary.journalInsights || {},
       recommendations: historySummary.recommendations || [],
     });
+    setSummaryId(historySummary.id);
     setError(null);
   };
 
@@ -350,6 +365,7 @@ export default function Trends(): JSX.Element {
         fetchSummary(selectedPeriod);
       } else {
         setSummary(null);
+        setSummaryId(null);
       }
     } else {
       fetchSummary(selectedPeriod);
@@ -363,6 +379,85 @@ export default function Trends(): JSX.Element {
       month: 'numeric',
       day: 'numeric',
     });
+  };
+
+  // チャットメッセージ取得
+  const fetchChatMessages = useCallback(async (id: number) => {
+    setChatFetching(true);
+    try {
+      const data = await api.trends.chat.getMessages(id);
+      if (data.success) {
+        setChatMessages(data.messages);
+      }
+    } catch (err) {
+      console.error('Failed to fetch trend chat messages:', err);
+    } finally {
+      setChatFetching(false);
+    }
+  }, []);
+
+  // 表示中の要約が切り替わったらチャットをリセット
+  useEffect(() => {
+    setChatMessages([]);
+    setChatInput('');
+  }, [summaryId]);
+
+  // チャットが開いている間，対象の要約のメッセージを取得
+  useEffect(() => {
+    if (chatOpen && summaryId) {
+      fetchChatMessages(summaryId);
+    }
+  }, [chatOpen, summaryId, fetchChatMessages]);
+
+  // メッセージ追加時にチャット内のみ下端へスクロール
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
+
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !summaryId || chatLoading) return;
+
+    const message = chatInput.trim();
+    setChatInput('');
+
+    const tempUserMessage: ChatMessage = {
+      id: -Date.now(),
+      role: 'user',
+      content: message,
+      created_at: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, tempUserMessage]);
+    setChatLoading(true);
+
+    try {
+      const data = await api.trends.chat.send(summaryId, message);
+      if (data.success) {
+        setChatMessages(prev => [
+          ...prev.filter(m => m.id !== tempUserMessage.id),
+          data.user_message,
+          data.ai_message,
+        ]);
+      }
+    } catch (err) {
+      console.error('Failed to send trend chat message:', err);
+      setChatMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+      setChatInput(message);
+      setError('AIの応答生成に失敗しました');
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const clearChat = async () => {
+    if (!summaryId || !confirm('チャット履歴をクリアしますか？')) return;
+    try {
+      await api.trends.chat.clear(summaryId);
+      setChatMessages([]);
+    } catch (err) {
+      console.error('Failed to clear trend chat:', err);
+    }
   };
 
   const currentStats = stats?.[selectedPeriod];
@@ -792,6 +887,121 @@ export default function Trends(): JSX.Element {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {/* トレンドチャット（APIキー設定時，かつ保存済み要約のみ） */}
+              {hasAnyApiKey && summaryId && (
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => setChatOpen(!chatOpen)}
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {chatOpen ? 'チャットを閉じる' : 'このトレンドについて質問する'}
+                    {chatMessages.length > 0 && !chatOpen && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700 rounded-full">
+                        {chatMessages.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {chatOpen && (
+                    <div className="mt-3 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      {/* チャットヘッダー */}
+                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                        <span className="text-xs font-medium text-gray-700">
+                          AIとの会話
+                        </span>
+                        {chatMessages.length > 0 && (
+                          <button
+                            onClick={clearChat}
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors"
+                            title="履歴をクリア"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* メッセージ表示エリア */}
+                      <div ref={chatMessagesRef} className="max-h-80 overflow-y-auto p-3 space-y-3">
+                        {chatFetching ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
+                          </div>
+                        ) : chatMessages.length === 0 ? (
+                          <div className="text-center py-4 text-xs text-gray-500">
+                            <p>トレンドの内容について質問や掘り下げをリクエストできます</p>
+                            <p className="mt-1 text-gray-400">例: 「このトピックの代表的な論文は？」「この傾向の背景は？」</p>
+                          </div>
+                        ) : (
+                          chatMessages.map((msg) => (
+                            <div
+                              key={msg.id}
+                              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div
+                                className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
+                                  msg.role === 'user'
+                                    ? 'bg-gray-600 text-white'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                                {msg.role === 'assistant' && msg.ai_model && (
+                                  <p className="mt-1 text-[10px] opacity-60">
+                                    {msg.ai_provider} / {msg.ai_model}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {chatLoading && (
+                          <div className="flex justify-start">
+                            <div className="bg-gray-100 px-3 py-2 rounded-lg">
+                              <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 入力エリア */}
+                      <div className="border-t border-gray-200 p-2">
+                        <div className="flex gap-2">
+                          <textarea
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              // IME入力中は無視
+                              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                              // Cmd+Enter (Mac) または Ctrl+Enter で送信
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                e.preventDefault();
+                                sendChatMessage();
+                              }
+                            }}
+                            placeholder="質問を入力... (⌘+Enterで送信)"
+                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                            rows={1}
+                            disabled={chatLoading}
+                          />
+                          <button
+                            onClick={sendChatMessage}
+                            disabled={!chatInput.trim() || chatLoading}
+                            className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {chatLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

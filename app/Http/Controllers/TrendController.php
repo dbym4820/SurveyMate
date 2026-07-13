@@ -371,7 +371,7 @@ class TrendController extends Controller
         $dateFrom = $dateRange['from']->format('Y-m-d');
         $dateTo = $dateRange['to']->format('Y-m-d');
 
-        TrendSummary::createSummary([
+        $record = TrendSummary::createSummary([
             'user_id' => $userId,
             'period' => $period,
             'date_from' => $dateFrom,
@@ -387,6 +387,8 @@ class TrendController extends Controller
             'tag_ids' => !empty($tagIds) ? $tagIds : null,
             'journal_ids' => !empty($journalIds) ? $journalIds : null,
         ]);
+
+        $result['id'] = $record->id;
 
         return $result;
     }

@@ -326,6 +326,15 @@ export const api = {
       const query = limit ? `?limit=${limit}` : '';
       return request(`/trends/history${query}`);
     },
+    // チャット（トレンド要約についての会話）
+    chat: {
+      getMessages: (trendSummaryId: number): Promise<ChatMessagesResponse> =>
+        request(`/trends/summaries/${trendSummaryId}/chat`),
+      send: (trendSummaryId: number, message: string): Promise<ChatSendResponse> =>
+        request(`/trends/summaries/${trendSummaryId}/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
+      clear: (trendSummaryId: number): Promise<{ success: boolean; message: string }> =>
+        request(`/trends/summaries/${trendSummaryId}/chat`, { method: 'DELETE' }),
+    },
   },
 };
 

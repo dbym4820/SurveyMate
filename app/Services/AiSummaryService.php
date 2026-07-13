@@ -6,6 +6,7 @@ use App\Models\Paper;
 use App\Models\Summary;
 use App\Models\SummaryMessage;
 use App\Models\Tag;
+use App\Models\TrendSummary;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -954,6 +955,88 @@ PROMPT;
         }
 
         return $result;
+    }
+
+    /**
+     * Chat about a trend summary (interactive drill-down)
+     *
+     * @param TrendSummary $trendSummary
+     * @param \Illuminate\Support\Collection $papers 分析対象期間・フィルタの論文
+     * @param string $userMessage
+     * @param array $history
+     * @param string|null $provider
+     * @param string|null $model
+     * @return array
+     */
+    public function trendChat(TrendSummary $trendSummary, $papers, string $userMessage, array $history = [], ?string $provider = null, ?string $model = null): array
+    {
+        $provider = $provider ?? $trendSummary->ai_provider ?? 'claude';
+        $model = $model ?? $trendSummary->ai_model ?? null;
+
+        $systemContext = $this->buildTrendChatSystemContext($trendSummary, $papers);
+        $messages = $this->buildChatMessages($systemContext, $history, $userMessage);
+
+        return match ($provider) {
+            'claude' => $this->callClaudeChat($messages, $model),
+            default => $this->callOpenAIChat($messages, $model),
+        };
+    }
+
+    private function buildTrendChatSystemContext(TrendSummary $trendSummary, $papers): string
+    {
+        $dateFrom = $trendSummary->date_from?->format('Y-m-d') ?? '不明';
+        $dateTo = $trendSummary->date_to?->format('Y-m-d') ?? '不明';
+
+        $keyTopics = collect($trendSummary->key_topics ?? [])->map(function ($topic) {
+            $count = isset($topic['paperCount']) ? "（{$topic['paperCount']}件）" : '';
+            return "- {$topic['topic']}{$count}: {$topic['description']}";
+        })->implode("\n");
+
+        $emergingTrends = collect($trendSummary->emerging_trends ?? [])
+            ->map(fn($trend) => "- {$trend}")->implode("\n");
+
+        $journalInsights = collect($trendSummary->journal_insights ?? [])
+            ->map(fn($insight, $journal) => "- {$journal}: {$insight}")->implode("\n");
+
+        $recommendations = collect($trendSummary->recommendations ?? [])
+            ->map(fn($rec) => "- {$rec}")->implode("\n");
+
+        $paperList = collect($papers)->take(50)->values()->map(function ($paper, $index) {
+            $num = $index + 1;
+            $journal = $paper->journal ? $paper->journal->name : '不明';
+            $abstract = $paper->abstract ? "\n   概要: " . mb_substr($paper->abstract, 0, 300) : '';
+            return "{$num}. [{$journal}] {$paper->title}{$abstract}";
+        })->implode("\n");
+
+        return <<<CONTEXT
+あなたは教育工学・AI教育・認知科学分野の専門家として，学術論文のトレンド分析について質問に答えるアシスタントです．以下のトレンド分析要約とその対象論文リストに基づいて，ユーザーの質問に日本語で回答してください．
+
+【分析対象】
+期間: {$dateFrom} 〜 {$dateTo}
+論文数: {$trendSummary->paper_count}件
+
+【トレンド分析要約】
+概要: {$trendSummary->overview}
+
+主要トピック:
+{$keyTopics}
+
+注目のトレンド:
+{$emergingTrends}
+
+論文誌別傾向:
+{$journalInsights}
+
+研究者へのおすすめ:
+{$recommendations}
+
+【対象論文リスト】
+{$paperList}
+
+上記の情報に基づいて，ユーザーの質問に簡潔かつ正確に回答してください．トピックの掘り下げを求められた場合は，対象論文リストの具体的な論文を挙げながら説明してください．リストにない情報について問われた場合は，その旨を伝えたうえで一般的な知見として補足してください．
+
+重要: 日本語の句読点は必ず「，」（カンマ）と「．」（ピリオド）を使用してください．「、」と「。」は絶対に使用しないでください．
+CONTEXT;
     }
 
     private function buildChatSystemContext(Paper $paper, Summary $summary): string
