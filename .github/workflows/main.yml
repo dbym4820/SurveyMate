@@ -18,13 +18,22 @@ jobs:
               port: ${{ secrets.DEPLOY_PORT }}
               key: ${{ secrets.DEPLOY_KEY }}
               script: |
+                # エラーを無視して「成功」扱いにしないよう即座に失敗させる
+                set -e
 
                 # nvm を読み込んで Node を使う
                 export NVM_DIR="$HOME/.nvm"
-                [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                nvm use 22
+                if [ -s "$NVM_DIR/nvm.sh" ]; then
+                  . "$NVM_DIR/nvm.sh"
+                  nvm use 22 || nvm install 22
+                fi
 
                 cd ${{ secrets.DEPLOY_DIR }}
+
+                # 前回デプロイ末尾で storage / bootstrap/cache の所有権を
+                # Webサーバーユーザーに変更しているため，git reset や setup.sh が
+                # Permission denied にならないよう一旦デプロイユーザーに戻す
+                sudo chown -R "$(id -un)" storage bootstrap/cache
 
                 # ローカルの変更を破棄してリモートを優先
                 git fetch origin
