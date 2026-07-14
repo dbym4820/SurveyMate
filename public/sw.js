@@ -1,5 +1,8 @@
 // Service Worker for SurveyMate PWA
-const CACHE_NAME = 'surveymate-v1';
+// v2: 認証フロー（/auth/*）を一切キャッシュ・介入しない．
+//     消費済みの認可コード付き callback URL / 認可リダイレクトを SW が
+//     再生すると，2回目以降の SSO ログインが invalid_grant で失敗するため．
+const CACHE_NAME = 'surveymate-v2';
 const urlsToCache = [
   './',
   './manifest.json',
@@ -33,17 +36,26 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
   // Skip API requests (don't cache)
-  if (event.request.url.includes('/api/')) return;
+  if (url.pathname.includes('/api/')) return;
+
+  // Skip authentication flow (SSO redirect / callback).
+  // These carry one-time credentials (code / state) and must never be
+  // cached or replayed by the service worker.
+  if (url.pathname.includes('/auth/')) return;
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response for caching
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+        // Cache only successful same-origin responses (never redirects)
+        if (response.ok && response.type === 'basic') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return response;
       })
       .catch(() => caches.match(event.request))

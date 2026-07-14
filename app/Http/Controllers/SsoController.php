@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use RuntimeException;
 
 /**
@@ -58,7 +59,8 @@ class SsoController extends Controller
                 'sso.nonce' => $nonce,
             ]);
 
-            return redirect()->away($authUrl);
+            // state/code を含む認可フローのレスポンスはどこにもキャッシュさせない
+            return $this->noStore(redirect()->away($authUrl));
         } catch (\Throwable $e) {
             Log::error('SSO リダイレクトエラー: ' . $e->getMessage());
             return $this->failLogin('SSO認証サーバに接続できませんでした');
@@ -80,12 +82,26 @@ class SsoController extends Controller
             return $this->failLogin('SSO認証がキャンセルまたは拒否されました');
         }
 
+        // 検証値は pull（取り出して削除）で一度きり使用する（コードの二重交換防止）
         $state = $request->session()->pull('sso.state');
         $pkce = $request->session()->pull('sso.pkce');
         $nonce = $request->session()->pull('sso.nonce');
 
+        // 保留中の state が無い＝このセッションが開始したログインフローではない
+        // （消費済み callback URL の再訪・リロード・「戻る」等）．
+        // 認可コードは一度交換すると失効するため，交換を試みずに打ち切る．
+        if (!$state) {
+            Log::info('SSO コールバック再訪を検出（保留中の state なし）', [
+                'has_code' => $request->filled('code'),
+            ]);
+            if ($this->hasValidAppSession($request)) {
+                return $this->noStore(redirect('/papers'));
+            }
+            return $this->failLogin('ログインの有効期限が切れました．もう一度ログインしてください');
+        }
+
         // state 検証（CSRF対策）
-        if (!$request->filled('code') || !$state || $request->input('state') !== $state) {
+        if (!$request->filled('code') || $request->input('state') !== $state) {
             return $this->failLogin('SSO認証の検証に失敗しました（state不一致）．もう一度お試しください');
         }
 
@@ -127,16 +143,39 @@ class SsoController extends Controller
             $sessionLifetime = config('session.lifetime', 1440) * 60;
             $session = Session::createForUser($user, $sessionLifetime);
 
+            // ログイン成功後は必ず固定パスへ（intended 等の「戻り先」は使わない．
+            // 過去の code 付き callback URL へ戻ると invalid_grant で必ず失敗する）
             $redirectTo = $user->initial_setup_completed ? '/papers' : '/initial-setup';
 
-            return redirect($redirectTo)
+            return $this->noStore(redirect($redirectTo))
                 ->cookie('session_id', $session->id, $sessionLifetime / 60, '/', null, false, true);
+        } catch (IdentityProviderException $e) {
+            // 消費済みコードの再交換（invalid_grant）等，IdP のトークンエンドポイント拒否
+            Log::error('SSO トークン交換エラー: ' . $e->getMessage(), [
+                'response' => $e->getResponseBody(),
+            ]);
+            return $this->failLogin('ログインの有効期限が切れました．もう一度ログインしてください');
         } catch (\Throwable $e) {
             Log::error('SSO ログインエラー: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
             return $this->failLogin('SSOログイン処理中にエラーが発生しました');
         }
+    }
+
+    /**
+     * 本システムのセッション（session_id クッキー）が有効かどうか
+     */
+    private function hasValidAppSession(Request $request): bool
+    {
+        $sessionId = $request->cookie('session_id');
+        if (!$sessionId) {
+            return false;
+        }
+
+        $session = Session::find($sessionId);
+
+        return $session !== null && !$session->isExpired();
     }
 
     /**
@@ -229,10 +268,19 @@ class SsoController extends Controller
     }
 
     /**
-     * エラーメッセージ付きでログイン画面へ戻す
+     * エラーメッセージ付きでログイン画面へ戻す（500 にはしない）
      */
     private function failLogin(string $message): RedirectResponse
     {
-        return redirect('/login?sso_error=' . urlencode($message));
+        return $this->noStore(redirect('/login?sso_error=' . urlencode($message)));
+    }
+
+    /**
+     * 認可フロー中のレスポンスをブラウザ・SW・中間キャッシュに保存させない
+     * （code/state 付きレスポンスの再生はコード二重交換＝invalid_grant の原因になる）
+     */
+    private function noStore(RedirectResponse $response): RedirectResponse
+    {
+        return $response->header('Cache-Control', 'no-store, max-age=0');
     }
 }

@@ -32,9 +32,11 @@ return new class extends Migration
             $table->index('fetched_at');
         });
 
-        // ユニーク制約とフルテキストインデックス
-        DB::statement('ALTER TABLE papers ADD UNIQUE KEY uk_journal_title (journal_id, title(255))');
-        DB::statement('ALTER TABLE papers ADD FULLTEXT INDEX ft_title_abstract (title, abstract)');
+        // ユニーク制約とフルテキストインデックス（プレフィックス長指定・FULLTEXTはMySQL固有構文）
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE papers ADD UNIQUE KEY uk_journal_title (journal_id, title(255))');
+            DB::statement('ALTER TABLE papers ADD FULLTEXT INDEX ft_title_abstract (title, abstract)');
+        }
     }
 
     public function down(): void
